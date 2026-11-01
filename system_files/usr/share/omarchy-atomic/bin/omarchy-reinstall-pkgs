@@ -1,0 +1,13 @@
+#!/bin/bash
+
+# omarchy:summary=Repair the system by rebasing onto the image
+
+# Atomic (bootc) replacement installed by bazzite-omarchy; the Omadora
+# original is kept in /usr/share/omarchy-atomic/orig/.
+
+source /usr/libexec/omarchy-atomic/lib.sh
+
+echo "Packages come from the image. To get back to a pristine image:"
+echo "  rpm-ostree reset        # drop layered packages and overrides"
+echo "  rpm-ostree rollback     # boot the previous deployment"
+exit 0

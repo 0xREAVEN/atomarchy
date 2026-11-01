@@ -1,0 +1,109 @@
+name: build-image
+
+on:
+  push:
+    branches: [main]
+    paths-ignore: ["**.md", "docs/**"]
+  pull_request:
+  schedule:
+    # Daily, after Bazzite's own builds, to pick up Bazzite + Omadora updates.
+    - cron: "40 6 * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  REGISTRY: ghcr.io/${{ github.repository_owner }}
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+    env:
+      HAS_SIGNING_KEY: ${{ secrets.SIGNING_SECRET != '' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # KDE (Plasma Login Manager), AMD/Intel GPUs
+          - image: bazzite-omarchy
+            base: ghcr.io/ublue-os/bazzite
+          # KDE, NVIDIA (open kernel modules, RTX 20xx and newer)
+          - image: bazzite-omarchy-nvidia
+            base: ghcr.io/ublue-os/bazzite-nvidia-open
+          # GNOME (GDM) variant, uncomment if wanted
+          # - image: bazzite-omarchy-gnome
+          #   base: ghcr.io/ublue-os/bazzite-gnome
+    steps:
+      - name: Free disk space (Bazzite images are ~18 GB unpacked)
+        uses: jlumbroso/free-disk-space@v1.3.1
+        with:
+          tool-cache: true
+
+      - uses: actions/checkout@v4
+
+      - name: Image name (lowercase)
+        id: meta
+        run: |
+          registry=$(echo "$REGISTRY" | tr '[:upper:]' '[:lower:]')
+          echo "registry=$registry" >>"$GITHUB_OUTPUT"
+          echo "date=$(date -u +%Y%m%d)" >>"$GITHUB_OUTPUT"
+
+      - name: Build
+        id: build
+        uses: redhat-actions/buildah-build@v2
+        with:
+          containerfiles: ./Containerfile
+          image: ${{ matrix.image }}
+          tags: stable stable-${{ steps.meta.outputs.date }}
+          build-args: |
+            BASE_IMAGE=${{ matrix.base }}
+            BASE_TAG=stable
+            IMAGE_NAME=${{ matrix.image }}
+            IMAGE_VENDOR=${{ github.repository_owner }}
+            IMAGE_REGISTRY=${{ steps.meta.outputs.registry }}
+          oci: false
+          extra-args: --pull=newer
+
+      - name: Smoke tests (Omarchy commands, user seeding, Bazzite reconciliation)
+        run: |
+          podman run --rm -v "$PWD/tests:/tests:ro" \
+            "localhost/${{ matrix.image }}:stable" bash /tests/smoke.sh
+
+      - name: Login to GHCR
+        if: github.event_name != 'pull_request'
+        uses: redhat-actions/podman-login@v1
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Push
+        id: push
+        if: github.event_name != 'pull_request'
+        uses: redhat-actions/push-to-registry@v2
+        with:
+          image: ${{ steps.build.outputs.image }}
+          tags: ${{ steps.build.outputs.tags }}
+          registry: ${{ steps.meta.outputs.registry }}
+
+      # Optional: sign with cosign when a SIGNING_SECRET (cosign private key)
+      # repository secret exists. See README "Signer l'image".
+      - name: Install cosign
+        if: github.event_name != 'pull_request' && env.HAS_SIGNING_KEY == 'true'
+        uses: sigstore/cosign-installer@v3
+
+      - name: Sign
+        if: github.event_name != 'pull_request' && env.HAS_SIGNING_KEY == 'true'
+        env:
+          COSIGN_PRIVATE_KEY: ${{ secrets.SIGNING_SECRET }}
+          COSIGN_PASSWORD: ""
+        run: |
+          echo "${{ secrets.GITHUB_TOKEN }}" | cosign login ghcr.io -u "${{ github.actor }}" --password-stdin
+          cosign sign -y --key env://COSIGN_PRIVATE_KEY \
+            "${{ steps.meta.outputs.registry }}/${{ matrix.image }}@${{ steps.push.outputs.digest }}"

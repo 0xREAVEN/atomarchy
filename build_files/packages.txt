@@ -1,0 +1,150 @@
+# Omarchy 4 package set for a Bazzite (Fedora 44 atomic) image.
+#
+# Source of truth: Omarchy's install/omarchy-base.packages (Arch), as mapped
+# to Fedora names by Omadora (github.com/kamm3r/omadora, same file).
+# Lines starting with # are ignored. Packages Bazzite already ships are left
+# in the list on purpose: dnf skips them, and the list stays comparable with
+# upstream.
+#
+# Repositories (enabled by build.sh):
+#   fedora / updates               - most of the list
+#   copr kammer/omadora            - omarchy, omarchy-settings, Omarchy apps
+#   copr lionheartp/Hyprland       - hyprland 0.57, quickshell, uwsm, portals
+#   terra (already on Bazzite,     - mise, usage-cli, starship, lazygit
+#          disabled by default)
+
+# --- Omarchy itself (Omadora RPMs: /usr/share/omarchy, /usr/bin/omarchy-*, /etc/skel)
+omarchy
+omarchy-settings
+omarchy-themes-intros
+omarchy-screensaver
+omarchy-speedtest
+
+# --- Wayland / Hyprland core
+hyprland
+hyprland-guiutils
+hyprland-preview-share-picker
+hyprpicker
+hyprsunset
+quickshell
+uwsm
+xdg-desktop-portal-hyprland
+xdg-desktop-portal-gtk
+xdg-terminal-exec
+wl-clipboard
+wtype
+grim
+slurp
+gpu-screen-recorder
+brightnessctl
+pamixer
+udiskie
+socat
+inotify-tools
+libxkbcommon-utils
+
+# --- Omarchy first-party apps (kammer/omadora COPR)
+aether
+cliamp
+hype
+monologue
+omacalc
+omacut
+omasnap
+omawrite
+owe
+tobi-try
+ttfx
+signed
+gliff
+disktree-bin
+localsend
+
+# --- Terminals, editor, shell tools
+foot
+neovim
+tmux
+starship
+zoxide
+eza
+bat
+fd-find
+fzf
+ripgrep
+gum
+jq
+btop
+fastfetch
+tldr
+less
+man-db
+plocate
+whois
+unzip
+golang-github-jesseduffield-lazygit
+mise
+usage-cli
+tree-sitter-cli
+util-linux-script
+bash-completion
+
+# --- Desktop apps (RPM, because Omarchy scripts call them directly)
+chromium
+nautilus
+nautilus-python
+sushi
+gnome-disk-utility
+evince
+imv
+mpv
+mpv-mpris
+xournalpp
+pinta
+system-config-printer
+gnome-keyring
+libsecret
+ffmpegthumbnailer
+gvfs-mtp
+gvfs-nfs
+gvfs-smb
+
+# --- OCR, QR, media helpers used by omarchy-* commands
+tesseract
+tesseract-langpack-eng
+tesseract-langpack-fra
+qrencode
+zbar
+ImageMagick
+vips-tools
+yt-dlp
+python3-gobject
+python3-poetry-core
+ruby
+compat-lua
+luarocks
+libyaml
+libpq
+mariadb-connector-c
+
+# --- Fonts and icons
+ttf-jetbrains-mono-nerd-basic
+ttf-ia-writer
+fontawesome-6-free-fonts
+google-noto-color-emoji-fonts
+google-noto-sans-cjk-fonts
+yaru-icon-theme
+
+# --- Hardware / system helpers
+# ddcutil: Bazzite ships terra-ddcutil (same binary), requesting ddcutil would conflict.
+bolt
+inxi
+exfatprogs
+dosfstools
+nss-mdns
+avahi
+bluez
+bluez-tools
+cups-pk-helper
+wireless-regdb
+rtkit
+plymouth-plugin-script

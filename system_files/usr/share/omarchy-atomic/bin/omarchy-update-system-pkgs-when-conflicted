@@ -1,0 +1,12 @@
+#!/bin/bash
+
+# omarchy:summary=Report a failed image upgrade
+# omarchy:hidden=true
+
+# Atomic (bootc) replacement installed by bazzite-omarchy; the Omadora
+# original is kept in /usr/share/omarchy-atomic/orig/.
+
+source /usr/libexec/omarchy-atomic/lib.sh
+
+atomic_note "The image upgrade failed. Check: rpm-ostree status, then retry omarchy update."
+exit 1

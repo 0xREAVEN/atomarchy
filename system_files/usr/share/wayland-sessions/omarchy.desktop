@@ -1,0 +1,7 @@
+[Desktop Entry]
+Name=Omarchy
+Comment=Omarchy 4 (Hyprland + Quickshell) on Bazzite, managed by uwsm
+Exec=/usr/libexec/omarchy-atomic/session
+TryExec=uwsm
+DesktopNames=Hyprland
+Type=Application

@@ -1,0 +1,12 @@
+#!/bin/bash
+
+# omarchy:summary=Refuse dnf transactions on the read-only image
+# omarchy:hidden=true
+
+# Atomic (bootc) replacement installed by bazzite-omarchy; the Omadora
+# original is kept in /usr/share/omarchy-atomic/orig/.
+
+source /usr/libexec/omarchy-atomic/lib.sh
+
+atomic_note "dnf cannot change this bootc system. Use: omarchy update, omarchy pkg add <pkg> (rpm-ostree) or Flatpak."
+exit 1

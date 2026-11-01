@@ -1,0 +1,26 @@
+#!/bin/bash
+
+# omarchy:summary=Show a fuzzy-finder TUI for picking Fedora packages to layer onto the image.
+# omarchy:requires-sudo=true
+
+fzf_args=(
+  --multi
+  --preview 'dnf5 info --available {1} 2>/dev/null'
+  --preview-label='alt-p: toggle description, alt-j/k: scroll, tab: multi-select'
+  --preview-label-pos='bottom'
+  --preview-window 'down:65%:wrap'
+  --bind 'alt-p:toggle-preview'
+  --bind 'alt-d:preview-half-page-down,alt-u:preview-half-page-up'
+  --bind 'alt-k:preview-up,alt-j:preview-down'
+  --color 'pointer:green,marker:green'
+)
+
+echo -e "\e[33mTip: GUI apps are better from Flathub (Install > AUR/Flathub) or Bazaar.\e[0m"
+
+pkg_names=$(dnf5 repoquery --available --queryformat '%{name}\n' 2>/dev/null | sort -u | fzf "${fzf_args[@]}")
+
+if [[ -n $pkg_names ]]; then
+  # shellcheck disable=SC2086
+  omarchy-pkg-add $pkg_names
+  omarchy-show-done $?
+fi

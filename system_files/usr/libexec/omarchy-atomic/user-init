@@ -1,0 +1,110 @@
+#!/bin/bash
+# Seeds an existing home with Omarchy's defaults, once.
+#
+#   user-init            first-login seeding (no-clobber), then finalize
+#   user-init --reset    replace conflicting configs too (backed up first)
+#
+# /etc/skel holds Omarchy's per-user defaults (from omarchy-settings). A new
+# account gets them from useradd; an account created before this image was
+# installed does not, which is the usual case on Bazzite.
+
+set -uo pipefail
+
+if (( EUID == 0 )); then
+  echo "user-init must run as the desktop user, not root." >&2
+  exit 1
+fi
+
+state="${XDG_STATE_HOME:-$HOME/.local/state}/omarchy-atomic"
+marker="$state/home-seeded"
+mode=${1:-}
+mkdir -p "$state"
+
+finalized() {
+  [[ -f ${XDG_STATE_HOME:-$HOME/.local/state}/omarchy/done/finalize-user ]]
+}
+
+# Omarchy's per-user finalization: agent skills, xdg user dirs, GTK
+# bookmarks, default browser, theme state, mise, keyring, hardware quirks.
+# It records its own completion, so a failed run is retried at next login.
+run_provision() {
+  command -v omarchy-provision-user >/dev/null || return 0
+  if omarchy-provision-user "$@"; then
+    return 0
+  fi
+  echo "omarchy-provision-user failed; it will be retried at next login."
+  return 1
+}
+
+if [[ $mode != "--reset" && -f $marker ]]; then
+  finalized || run_provision
+  exit 0
+fi
+
+stamp=$(date +%Y%m%d-%H%M%S)
+backup="$state/backup-$stamp"
+skipped="$state/skipped-$stamp.txt"
+echo "[$stamp] Omarchy home seeding (${mode:-first login})"
+
+# Only the /etc/skel files Omarchy's packages own: Bazzite's own skel content
+# (Steam autostart, .bash_profile, ...) is already handled for existing users
+# and must not come back if the user removed it. Walk file by file so an
+# existing file is never overwritten silently: by default it is kept and
+# listed, with --reset it is backed up first.
+cd /etc/skel || exit 1
+while IFS= read -r path; do
+  [[ $path == /etc/skel/* ]] || continue
+  [[ -f $path || -L $path ]] || continue
+  entry=$path
+  rel=${path#/etc/skel/}
+  target="$HOME/$rel"
+  if [[ -L $entry ]]; then
+    [[ -e $target || -L $target ]] && continue
+    mkdir -p "$(dirname "$target")"
+    cp -P "$entry" "$target"
+    continue
+  fi
+  if [[ ! -e $target ]]; then
+    mkdir -p "$(dirname "$target")"
+    cp -p "$entry" "$target"
+  elif ! cmp -s "$entry" "$target"; then
+    if [[ $mode == "--reset" ]]; then
+      mkdir -p "$backup/$(dirname "$rel")"
+      cp -p "$target" "$backup/$rel"
+      cp -p "$entry" "$target"
+    else
+      echo "$rel" >>"$skipped"
+    fi
+  fi
+done < <(rpm -ql omarchy-settings omarchy 2>/dev/null | sort -u)
+cd - >/dev/null || true
+
+# ~/.bashrc predates Omarchy for existing users. Fedora's .bashrc sources
+# ~/.bashrc.d/*, so hook Omarchy's shell environment (aliases, starship,
+# mise, zoxide...) in there instead of rewriting the user's file.
+if ! grep -q 'omarchy' "$HOME/.bashrc" 2>/dev/null; then
+  mkdir -p "$HOME/.bashrc.d"
+  cat >"$HOME/.bashrc.d/50-omarchy.sh" <<'EOF'
+# Omarchy shell environment (added by bazzite-omarchy).
+[[ -r /usr/share/omarchy/default/bash/env-bootstrap ]] && source /usr/share/omarchy/default/bash/env-bootstrap
+[[ $- == *i* && -r $OMARCHY_PATH/default/bash/rc ]] && source "$OMARCHY_PATH/default/bash/rc"
+EOF
+fi
+
+touch "$marker"
+
+if [[ $mode == "--reset" ]]; then
+  run_provision --force
+else
+  run_provision
+fi
+
+if [[ -s $skipped ]]; then
+  count=$(wc -l <"$skipped")
+  echo "$count existing file(s) kept as they were; list in $skipped"
+  echo "Run 'ujust omarchy-reset-configs' to switch them to Omarchy's defaults (with backup)."
+fi
+if [[ -d $backup ]]; then
+  echo "Previous files backed up to $backup"
+fi
+exit 0

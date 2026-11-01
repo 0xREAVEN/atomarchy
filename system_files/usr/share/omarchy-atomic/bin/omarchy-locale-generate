@@ -1,0 +1,16 @@
+#!/bin/bash
+
+# omarchy:summary=Make sure the locale for an Omarchy language is installed
+# omarchy:hidden=true
+
+# Atomic (bootc) replacement installed by bazzite-omarchy; the Omadora
+# original is kept in /usr/share/omarchy-atomic/orig/.
+
+source /usr/libexec/omarchy-atomic/lib.sh
+
+code=${1:-}
+locale=$(jq -r --arg code "$code" '.[$code].locale // empty' /usr/share/omarchy/default/i18n/locales.json)
+[[ $locale =~ ^[a-z]{2,3}_[A-Z]{2}\.UTF-8$ ]] || { echo "Unknown language code: $code" >&2; exit 1; }
+rpm -q glibc-all-langpacks >/dev/null 2>&1 && exit 0
+rpm -q "glibc-langpack-${locale%%_*}" >/dev/null 2>&1 && exit 0
+rpm-ostree install --idempotent --apply-live -y "glibc-langpack-${locale%%_*}" >/dev/null

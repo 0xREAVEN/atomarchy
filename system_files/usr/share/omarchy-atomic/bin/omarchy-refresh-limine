@@ -1,0 +1,12 @@
+#!/bin/bash
+
+# omarchy:summary=Not used on Bazzite (bootc manages the bootloader and repositories)
+# omarchy:hidden=true
+
+# Atomic (bootc) replacement installed by bazzite-omarchy; the Omadora
+# original is kept in /usr/share/omarchy-atomic/orig/.
+
+source /usr/libexec/omarchy-atomic/lib.sh
+
+echo "Not applicable on Bazzite: boot entries and repositories come from the image."
+exit 0
