@@ -1,0 +1,25 @@
+Atomarchy
+Copyright 2026 0xREAVEN and Atomarchy contributors
+
+This product is licensed under the Apache License, Version 2.0 (see LICENSE).
+
+It includes or adapts material from the following projects:
+
+- Bazzite (https://github.com/ublue-os/bazzite), Apache License 2.0
+  build_files/gaming/10-kernel.sh is adapted from build_files/install-kernel-akmods;
+  gaming sysctl values and the ntsync module load come from system_files/desktop.
+
+- Bazzora (https://github.com/0xREAVEN/bazzora), Apache License 2.0
+  Gaming tunables and the toggle-amdgpu-overdrive recipe.
+
+- osbuild image-builder documentation (https://osbuild.org), Apache License 2.0
+  iso/iso-setup.sh follows its Anaconda installer recipe.
+
+At build time, the images install software from Fedora, Universal Blue,
+Terra, and the COPR projects kammer/omadora (Omadora, a Fedora port of
+Omarchy, MIT License) and lionheartp/Hyprland. Omarchy
+(https://github.com/basecamp/omarchy) is MIT-licensed by David Heinemeier
+Hansson and Basecamp. These packages keep their own licenses.
+
+Atomarchy is a community project and is not affiliated with or endorsed by
+Omarchy, Basecamp, Universal Blue, Bazzite or the Fedora Project.

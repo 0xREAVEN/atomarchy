@@ -1,0 +1,24 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": ["config:recommended"],
+  "enabledManagers": ["custom.regex"],
+  "customManagers": [
+    {
+      "description": "Bazzite OGC kernel (akmods tags) and other pinned images annotated with a renovate comment",
+      "customType": "regex",
+      "managerFilePatterns": ["/^Containerfile$/", "/^iso/Containerfile$/", "/^\\.github/workflows/.+\\.ya?ml$/"],
+      "matchStrings": [
+        "# renovate: datasource=(?<datasource>\\S+) depName=(?<depName>\\S+)( extractVersion=(?<extractVersion>\\S+))?( versioning=(?<versioning>\\S+))?\\s+ARG \\w+=(?<currentValue>\\S+)",
+        "# renovate: datasource=(?<datasource>\\S+) depName=(?<depName>\\S+)\\s+\\w+: \\S+?:(?<currentValue>\\S+)"
+      ]
+    }
+  ],
+  "packageRules": [
+    {
+      "description": "A new OGC kernel must ship with matching akmods-extra: never automerge",
+      "matchDepNames": ["ghcr.io/ublue-os/akmods"],
+      "automerge": false,
+      "labels": ["kernel"]
+    }
+  ]
+}

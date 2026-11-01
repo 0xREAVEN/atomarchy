@@ -1,0 +1,33 @@
+#!/bin/bash
+
+# omarchy:summary=Show a fuzzy-finder TUI for picking layered packages to remove.
+# omarchy:requires-sudo=true
+
+source /usr/libexec/atomarchy/lib.sh
+
+fzf_args=(
+  --multi
+  --preview 'rpm -qi {1}'
+  --preview-label='alt-p: toggle description, alt-j/k: scroll, tab: multi-select'
+  --preview-label-pos='bottom'
+  --preview-window 'down:65%:wrap'
+  --bind 'alt-p:toggle-preview'
+  --bind 'alt-d:preview-half-page-down,alt-u:preview-half-page-up'
+  --bind 'alt-k:preview-up,alt-j:preview-down'
+  --color 'pointer:red,marker:red'
+)
+
+layered=$(atomic_layered_packages | sort -u)
+if [[ -z $layered ]]; then
+  echo "No packages are layered on top of the image."
+  echo "Image packages stay; Flatpaks: flatpak uninstall <app>."
+  exit 0
+fi
+
+pkg_names=$(fzf "${fzf_args[@]}" <<<"$layered")
+
+if [[ -n $pkg_names ]]; then
+  # shellcheck disable=SC2086
+  omarchy-pkg-drop $pkg_names
+  omarchy-show-done $?
+fi

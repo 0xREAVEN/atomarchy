@@ -1,134 +1,116 @@
-# Omarchy sur Bazzite
+<div align="center">
 
-Une image [bootc](https://bootc-dev.github.io/bootc/) qui ajoute **[Omarchy 4](https://omarchy.org)** à **[Bazzite](https://bazzite.gg)**. On y retrouve Hyprland 0.57 en configuration Lua, le bureau Quickshell, les 23 thèmes, plus de 500 commandes `omarchy-*` et les applis Omarchy. Bazzite conserve tout ce qu'il apporte pour le jeu : noyau, Mesa, Steam, gamescope, pilotes et mises à jour atomiques.
+# Atomarchy
 
-- Au démarrage, une session **« Omarchy »** apparaît sur l'écran de connexion, à côté de Plasma (ou de GNOME).
-- Omarchy provient des RPM Fedora du projet [Omadora](https://github.com/kamm3r/omadora) (COPR `kammer/omadora`). Hyprland et Quickshell proviennent du COPR `lionheartp/Hyprland`.
-- Les commandes Omarchy qui supposent un système modifiable (pacman/dnf, Limine, Snapper) sont remplacées par des équivalents atomiques : rpm-ostree, bootc, Flatpak et Homebrew.
+**[Omarchy 4](https://omarchy.org) sur Fedora Atomic : le bureau Hyprland + Quickshell de DHH, en image système immuable.**
 
-L'analyse complète est dans **[docs/ANALYSE.md](docs/ANALYSE.md)** : ce qui est repris, adapté ou abandonné, les conflits avec Bazzite et les risques.
+[![build](https://github.com/0xREAVEN/atomarchy/actions/workflows/build.yml/badge.svg)](https://github.com/0xREAVEN/atomarchy/actions/workflows/build.yml)
+[![lint](https://github.com/0xREAVEN/atomarchy/actions/workflows/lint.yml/badge.svg)](https://github.com/0xREAVEN/atomarchy/actions/workflows/lint.yml)
+[![iso](https://github.com/0xREAVEN/atomarchy/actions/workflows/iso.yml/badge.svg)](https://github.com/0xREAVEN/atomarchy/actions/workflows/iso.yml)
+![Fedora](https://img.shields.io/badge/Fedora-44-blue?logo=fedora)
+![Licence](https://img.shields.io/badge/Licence-Apache%202.0-blue.svg)
 
-## Images
+</div>
 
-| Image | Base | Pour |
+Atomarchy est une distribution dérivée de [Universal Blue](https://universal-blue.org) : chaque image est un conteneur [bootc](https://bootc-dev.github.io/bootc/) construit chaque jour, testé dans une machine virtuelle, signé, puis publié. Le système se met à jour d'un bloc et revient en arrière d'une commande.
+
+> Projet communautaire, **non affilié** à Omarchy, Basecamp ou Universal Blue. Omarchy provient des RPM Fedora du projet [Omadora](https://github.com/kamm3r/omadora).
+
+## Les deux images
+
+| Image | Pour qui | Contenu |
 |---|---|---|
-| `ghcr.io/<toi>/bazzite-omarchy:stable` | `bazzite` (KDE) | GPU AMD ou Intel |
-| `ghcr.io/<toi>/bazzite-omarchy-nvidia:stable` | `bazzite-nvidia-open` | NVIDIA RTX 20xx et plus récent |
+| **`atomarchy`** | Tout le monde | `base-main` de Universal Blue (Fedora 44 Atomic, codecs) + Omarchy 4 : Hyprland 0.57 (config Lua), bureau Quickshell, 23 thèmes, plus de 500 commandes `omarchy`, applis Omarchy, SDDM et Plymouth aux couleurs d'Omarchy, Docker, Bazaar, Homebrew, mises à jour automatiques |
+| **`atomarchy-gaming`** | PC de jeu (AMD/Intel) | Tout `atomarchy` + **noyau de jeu de Bazzite (OGC)**, ntsync, pilotes de volants (Fanatec, Thrustmaster, Logitech), manettes Xbox (xone), `ryzen_smu`, `zenergy` ; Mesa de Terra en 32 et 64 bits, Steam, Gamescope, MangoHud, umu-launcher, vkBasalt ; LACT ; tuned + tuned-ppd et les réglages de jeu de Bazzora |
 
-Pour une variante GNOME, décommente l'entrée correspondante dans `.github/workflows/build.yml`. Les images `-deck` ne sont pas prises en charge, car elles démarrent en mode jeu Steam.
+Cartes NVIDIA : pas encore prises en charge.
 
 ## Installation
 
-Il faut d'abord un Bazzite installé (ISO officielle sur [bazzite.gg](https://bazzite.gg)), puis :
+### Depuis l'ISO
 
-1. Dans ce dépôt GitHub, va dans **Actions** et lance **build-image** (ou attends le build quotidien). L'image est publiée sur `ghcr.io/<toi>/…`. Rends le paquet public dans *Packages → Package settings*, ou connecte-toi au registre sur la machine.
-2. Sur la machine Bazzite, bascule vers l'image :
+Les ISO sont publiées chaque mois dans les [Releases](https://github.com/0xREAVEN/atomarchy/releases). Elles sont découpées en parties de 1,9 Go à cause de la limite de GitHub. Les instructions de reconstitution et de vérification sont dans chaque Release. L'image est embarquée dans l'ISO, l'installation se fait donc sans réseau.
+
+**Atomarchy Gaming avec Secure Boot :** au premier redémarrage, *MokManager* propose *Enroll MOK*. Validez avec le mot de passe `universalblue` (la clé de Universal Blue qui signe le noyau de jeu, comme sur Bazzite).
+
+### Depuis un Fedora Atomic ou un Universal Blue existant (Bazzite, Bluefin, Aurora…)
+
+1. Basculez sur l'image (non vérifiée la première fois, la clé n'étant pas encore sur la machine) :
 
    ```bash
-   sudo bootc switch ghcr.io/0xreaven/bazzite-omarchy:stable
+   sudo bootc switch ghcr.io/0xreaven/atomarchy:stable
    ```
 
-   Variante équivalente avec rpm-ostree :
+2. Redémarrez.
+3. Vérifiez les signatures pour toutes les mises à jour suivantes :
 
    ```bash
-   sudo rpm-ostree rebase ostree-unverified-registry:ghcr.io/0xreaven/bazzite-omarchy:stable
+   sudo bootc switch --enforce-container-sigpolicy ghcr.io/0xreaven/atomarchy:stable
    ```
 
-3. Redémarre. Sur l'écran de connexion, choisis la session **Omarchy**.
+Pour la variante jeu, remplacez `atomarchy` par `atomarchy-gaming`.
 
-À la première ouverture de la session, ton dossier personnel est préparé automatiquement :
+À la première ouverture de la session **Omarchy**, votre dossier personnel est préparé : les configurations d'Omarchy sont copiées **sans écraser vos fichiers** (la liste de ceux conservés est indiquée), puis la configuration utilisateur d'Omarchy est lancée.
 
-- les configurations Omarchy sont copiées **sans écraser tes fichiers existants** (la liste des fichiers conservés est dans `~/.local/state/omarchy-atomic/`) ;
-- l'environnement shell d'Omarchy est branché dans `~/.bashrc.d/` ;
-- `omarchy-provision-user` est lancé.
+## Canaux
 
-Pour appliquer partout les réglages Omarchy par défaut (avec une sauvegarde préalable) :
-
-```bash
-ujust omarchy-reset-configs
-```
-
-### Revenir en arrière
-
-Pour redémarrer sur le déploiement précédent (également proposé dans le menu de démarrage) :
+| Canal | Tag | Contenu |
+|---|---|---|
+| **stable** | `:stable`, `:latest`, `:44` | La branche `main`, construite chaque jour |
+| **testing** | `:testing` | La branche `testing`, pour essayer les changements avant tout le monde |
 
 ```bash
-sudo rpm-ostree rollback
+ujust atomarchy-channel testing
 ```
 
-Pour revenir à Bazzite standard :
-
-```bash
-sudo bootc switch ghcr.io/ublue-os/bazzite:stable
-```
+Chaque publication a aussi un tag daté (`stable-44.20261101`), ce qui permet de revenir à une version précise.
 
 ## Au quotidien
 
 | Besoin | Commande |
 |---|---|
-| Tout mettre à jour (image, Flatpak, brew, migrations Omarchy) | `omarchy update` ou `ujust update` |
-| Installer une appli graphique | Menu Omarchy → Install (Flathub) ou Bazaar |
-| Installer un paquet système | `omarchy pkg add <paquet>`, qui l'ajoute comme couche rpm-ostree utilisable tout de suite |
-| Outils de dev isolés | `distrobox`, `toolbox` ou `brew` |
-| Versions installées | `ujust omarchy-info` |
-| Docker sans sudo | `ujust omarchy-docker-group` (attention : le groupe docker équivaut à un accès root) |
-| Thème de démarrage Omarchy | `ujust omarchy-plymouth` |
+| Tout mettre à jour (image, Flatpak, Homebrew, migrations Omarchy) | `omarchy update` (sinon `uupd` le fait en arrière-plan) |
+| Revenir à la version précédente | `sudo rpm-ostree rollback`, ou le menu de démarrage |
+| Installer une application | Bazaar (Flathub), ou le menu Omarchy → Install |
+| Ajouter un paquet système | `omarchy pkg add <paquet>` (couche rpm-ostree, utilisable tout de suite) |
+| Diagnostic | `ujust atomarchy-doctor` |
+| Remettre les configurations Omarchy (avec sauvegarde) | `ujust atomarchy-reset-configs` |
+| Docker sans `sudo` | `ujust atomarchy-docker-group` (le groupe docker équivaut à un accès root) |
+| Overclocking / undervolt AMD (gaming) | `ujust toggle-amdgpu-overdrive`, puis LACT |
+| HDR + Wayland natif pour Proton (gaming) | `ujust toggle-proton-hdr` |
 
-## Construire localement
+## Qualité et sécurité
+
+Chaque build, sur chaque image, passe par ces étapes :
+
+1. **Lint** : ShellCheck, actionlint, hadolint, formatage `just`.
+2. **Construction** de l'image, puis `bootc container lint`.
+3. **Tests de fumée dans l'image** (une centaine de vérifications) : commandes Omarchy, adaptation atomique, SDDM et Plymouth, services, politique de signature, noyau OGC et modules, Mesa de Terra uniquement, préparation d'un compte existant.
+4. **Démarrage réel** : installation sur un disque virtuel avec `bootc install`, démarrage dans QEMU/KVM, vérifications par SSH (aucune unité en échec, SDDM lancé, noyau, ntsync…), capture de l'écran de connexion.
+5. **Rapport des paquets** ajoutés, retirés et mis à jour par rapport à la version publiée.
+6. **Publication en `candidate`, signature cosign, vérification**, puis **promotion** vers le canal sous le même digest.
+
+Une image qui échoue à une étape n'est jamais publiée : les utilisateurs restent sur la dernière version validée. Les versions des actions, du noyau OGC et de l'outil d'ISO sont tenues à jour par Dependabot et Renovate. Voir [SECURITY.md](SECURITY.md).
+
+Pour vérifier une image :
 
 ```bash
-podman build -t localhost/bazzite-omarchy:dev .
+cosign verify --key keys/cosign.pub ghcr.io/0xreaven/atomarchy:stable
 ```
 
-Puis pour basculer sur cette image locale :
+## Construire soi-même
 
 ```bash
-sudo bootc switch --transport containers-storage localhost/bazzite-omarchy:dev
+just build                     # ou: just build atomarchy-gaming
+just test                      # tests de fumée
+just boot-test                 # démarrage en VM (KVM)
+just lint
 ```
 
-Pour tester l'image construite :
+L'architecture est décrite dans [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) et l'étude initiale (Omarchy, Bazzite, choix de conception) dans [docs/ANALYSE.md](docs/ANALYSE.md). Pour contribuer : [CONTRIBUTING.md](CONTRIBUTING.md).
 
-```bash
-podman run --rm -v ./tests:/tests:ro localhost/bazzite-omarchy:dev bash /tests/smoke.sh
-```
+## Licence et remerciements
 
-Options de build (`--build-arg`) :
+Licence **Apache 2.0** ([LICENSE](LICENSE), [NOTICE](NOTICE)).
 
-| Argument | Défaut | Effet |
-|---|---|---|
-| `BASE_IMAGE` | `ghcr.io/ublue-os/bazzite` | ou `…/bazzite-nvidia-open`, `…/bazzite-gnome` |
-| `WITH_DOCKER` | `1` | moby-engine, compose, buildx |
-| `WITH_FCITX` | `1` | fcitx5 et les méthodes de saisie CJK d'Omarchy |
-| `WITH_PLYMOUTH_THEME` | `0` | thème de démarrage Omarchy (initramfs reconstruit dans l'image) |
-
-## Contenu du dépôt
-
-```
-Containerfile                 base Bazzite → build.sh → bootc container lint
-build_files/build.sh          dépôts, paquets, correctifs de compatibilité, arbitrages Bazzite
-build_files/packages.txt      liste Omarchy → noms Fedora (d'après Omadora)
-system_files/
-  usr/share/wayland-sessions/omarchy.desktop    session « Omarchy »
-  usr/libexec/omarchy-atomic/session, user-init  préparation du $HOME puis uwsm/Hyprland
-  usr/share/omarchy-atomic/bin/omarchy-*        commandes remplacées (pkg, update, snapshot…)
-  usr/share/ublue-os/just/60-custom.just        recettes ujust omarchy-*
-  usr/lib/systemd/system/omarchy-atomic-flatpaks.service  Obsidian, LibreOffice (Flathub)
-.github/workflows/build.yml   build quotidien, tests puis publication sur GHCR (signature cosign optionnelle)
-tests/smoke.sh                81 tests lancés dans l'image (commandes, initialisation du $HOME, arbitrages)
-docs/ANALYSE.md               l'analyse complète
-```
-
-## Signer l'image (optionnel)
-
-1. Génère une paire de clés avec `cosign generate-key-pair`.
-2. Ajoute la clé privée comme secret de dépôt `SIGNING_SECRET`.
-3. Le workflow signera chaque image poussée.
-
-Pour imposer la vérification côté machine, il faut en plus livrer `cosign.pub` et une politique dans `/etc/containers/policy.json`, comme le fait le [modèle d'image uBlue](https://github.com/ublue-os/image-template).
-
-## Crédits
-
-- [Omarchy](https://github.com/basecamp/omarchy) par DHH et Basecamp (MIT)
-- [Omadora](https://github.com/kamm3r/omadora) par kamm3r, le portage Fedora d'Omarchy dont on utilise les RPM
-- [Bazzite](https://github.com/ublue-os/bazzite) et [Universal Blue](https://universal-blue.org)
-- [lionheartp/Hyprland](https://copr.fedorainfracloud.org/coprs/lionheartp/Hyprland/) pour Hyprland et Quickshell sur Fedora
+Tout repose sur le travail de [Omarchy](https://github.com/basecamp/omarchy) (DHH, MIT), [Omadora](https://github.com/kamm3r/omadora) (kamm3r, MIT), [Universal Blue](https://universal-blue.org) et [Bazzite](https://bazzite.gg) (Apache 2.0), [Terra](https://terra.fyralabs.com), le COPR [lionheartp/Hyprland](https://copr.fedorainfracloud.org/coprs/lionheartp/Hyprland/), [Fedora](https://fedoraproject.org) et [osbuild](https://osbuild.org).

@@ -1,5 +1,0 @@
-# Omarchy default apps that have no RPM on Fedora, installed system-wide from
-# Flathub on first boot (and again whenever this list changes).
-# Bazzite's own Flatpaks (Firefox, Okular, Flatseal, ...) are left alone.
-md.obsidian.Obsidian
-org.libreoffice.LibreOffice

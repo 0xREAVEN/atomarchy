@@ -1,0 +1,24 @@
+#!/bin/bash
+
+# omarchy:summary=Update Flatpak apps (system and user) and Homebrew packages
+
+# On Bazzite apps live outside the image: system Flatpaks (Bazzite's), user
+# Flatpaks (Omarchy's Install menu) and Homebrew. omarchy-update still holds
+# sudo authorization here, so system Flatpaks update without a new prompt.
+
+source /usr/libexec/atomarchy/lib.sh
+
+echo -e "\e[32m\nUpdate Flatpak apps\e[0m"
+if sudo -n true 2>/dev/null; then
+  sudo -n flatpak update -y --system --noninteractive || echo -e "\e[31mSystem Flatpak update failed\e[0m"
+else
+  flatpak update -y --system --noninteractive || echo -e "\e[31mSystem Flatpak update failed\e[0m"
+fi
+flatpak update -y --user --noninteractive || echo -e "\e[31mUser Flatpak update failed\e[0m"
+
+if atomic_brew --version &>/dev/null; then
+  echo -e "\e[32m\nUpdate Homebrew packages\e[0m"
+  atomic_brew update --quiet && atomic_brew upgrade || echo -e "\e[31mHomebrew update failed\e[0m"
+fi
+echo
+exit 0

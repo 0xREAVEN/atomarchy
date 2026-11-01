@@ -1,0 +1,12 @@
+#!/bin/bash
+
+# omarchy:summary=Boot splash and login theme are part of the Bazzite image
+# omarchy:hidden=true
+
+# Atomic (bootc) replacement installed by Atomarchy; the Omadora
+# original is kept in /usr/share/atomarchy/orig/.
+
+source /usr/libexec/atomarchy/lib.sh
+
+atomic_note "Boot splash/login screen come from the image (read-only /usr); skipped."
+exit 0

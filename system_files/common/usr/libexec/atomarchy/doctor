@@ -1,0 +1,63 @@
+#!/bin/bash
+# Atomarchy health check (read-only): `ujust atomarchy-doctor`.
+set -uo pipefail
+
+info=/usr/share/ublue-os/image-info.json
+problems=0
+ok() { printf '  \e[32m✓\e[0m %s\n' "$*"; }
+ko() { printf '  \e[31m✗\e[0m %s\n' "$*"; problems=$((problems + 1)); }
+note() { printf '  \e[33m•\e[0m %s\n' "$*"; }
+section() { printf '\n\e[1m%s\e[0m\n' "$*"; }
+
+flavor=$(jq -r '."image-flavor" // "main"' "$info" 2>/dev/null)
+
+section "Image"
+jq -r '"  \(."image-name") \(.version) — channel \(."image-tag") — Omarchy \(."omarchy-version")"' "$info" 2>/dev/null ||
+  ko "image-info.json unreadable"
+booted=$(rpm-ostree status --json 2>/dev/null | jq -r '.deployments[] | select(.booted) | ."container-image-reference" // empty')
+if [[ $booted == ostree-image-signed:* ]]; then
+  ok "booted image is signature-verified: $booted"
+elif [[ -n $booted ]]; then
+  note "booted image is not signature-verified: $booted"
+  note "switch with: sudo bootc switch --enforce-container-sigpolicy ${booted#*registry:}"
+fi
+if rpm-ostree status --json 2>/dev/null | jq -e '[.deployments[] | select(.staged)] | length > 0' >/dev/null; then
+  note "an update is staged: reboot to apply it"
+fi
+layered=$(rpm-ostree status --json 2>/dev/null | jq -r '.deployments[] | select(.booted) | (."requested-packages" // []) | join(" ")')
+[[ -n $layered ]] && note "layered packages: $layered"
+
+section "System"
+failed=$(systemctl --failed --no-legend --plain 2>/dev/null | awk '{print $1}' | tr '\n' ' ')
+if [[ -z ${failed// /} ]]; then ok "no failed system units"; else ko "failed units: $failed"; fi
+if systemctl is-enabled --quiet sddm.service; then ok "SDDM enabled"; else ko "SDDM not enabled"; fi
+if systemctl is-enabled --quiet uupd.timer; then ok "automatic updates (uupd) enabled"; else note "automatic updates (uupd) disabled"; fi
+if [[ -f /usr/share/wayland-sessions/omarchy.desktop ]]; then ok "Omarchy session installed"; else ko "Omarchy session missing"; fi
+if powerprofilesctl get >/dev/null 2>&1; then ok "power profile: $(powerprofilesctl get)"; else ko "power profiles daemon unreachable"; fi
+
+section "Your session"
+state="${XDG_STATE_HOME:-$HOME/.local/state}"
+if [[ -f $state/omarchy/done/finalize-user ]]; then ok "Omarchy user setup complete"; else note "Omarchy user setup pending (runs at next Omarchy login)"; fi
+if compgen -G "$state/atomarchy/skipped-*.txt" >/dev/null; then
+  note "$(sort -u "$state"/atomarchy/skipped-*.txt | wc -l) config file(s) kept as yours (ujust atomarchy-reset-configs)"
+fi
+
+if [[ $flavor == "gaming" ]]; then
+  section "Gaming"
+  if [[ $(uname -r) == *ogc* ]]; then ok "Bazzite OGC kernel: $(uname -r)"; else ko "not running the OGC kernel: $(uname -r)"; fi
+  if [[ -c /dev/ntsync ]]; then ok "NTSYNC available (/dev/ntsync)"; else ko "NTSYNC unavailable"; fi
+  if systemctl is-active --quiet lactd.service; then ok "LACT daemon running"; else note "LACT daemon not running"; fi
+  if command -v tuned-adm >/dev/null; then ok "tuned profile: $(tuned-adm active 2>/dev/null | sed 's/^Current active profile: //')"; fi
+  if [[ -r /sys/module/amdgpu/parameters/ppfeaturemask ]]; then
+    mask=$(( $(cat /sys/module/amdgpu/parameters/ppfeaturemask) ))
+    if (( mask & 0x4000 )); then ok "AMD overdrive enabled"; else note "AMD overdrive disabled (ujust toggle-amdgpu-overdrive)"; fi
+  fi
+fi
+
+echo
+if (( problems == 0 )); then
+  printf '\e[32mEverything looks fine.\e[0m\n'
+else
+  printf '\e[31m%d problem(s) found.\e[0m\n' "$problems"
+  exit 1
+fi

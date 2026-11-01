@@ -1,0 +1,51 @@
+# Atomarchy installer environment: the Fedora bootc image plus Anaconda,
+# turned into an installer ISO by osbuild's image-builder (generic-iso).
+#
+# Follows osbuild's "Anaconda installer" recipe:
+# https://osbuild.org/docs/developer-guide/projects/image-builder/advanced/bootc/isos/
+#
+# The Atomarchy image itself is embedded in the ISO (image-builder
+# --bootc-installer-payload-ref), so installation works offline.
+#
+#   podman build --build-arg PAYLOAD_REF=ghcr.io/0xreaven/atomarchy:stable -t localhost/atomarchy-installer iso/
+
+ARG FEDORA_VERSION=44
+ARG PAYLOAD_REF=ghcr.io/0xreaven/atomarchy:stable
+
+# The Universal Blue Secure Boot key (the gaming kernel is signed with it).
+FROM ${PAYLOAD_REF} AS payload
+
+FROM quay.io/fedora/fedora-bootc:${FEDORA_VERSION}
+
+ARG FEDORA_VERSION
+ARG PAYLOAD_REF
+ARG PRODUCT_NAME=Atomarchy
+ARG ISO_LABEL=Atomarchy-44
+# 1 for atomarchy-gaming (kernel signed with the Universal Blue key)
+ARG ENROLL_UBLUE_KEY=0
+
+RUN dnf5 install -qy \
+      anaconda \
+      anaconda-install-img-deps \
+      anaconda-dracut \
+      dracut-config-generic \
+      dracut-network \
+      net-tools \
+      grub2-efi-x64-cdboot \
+      plymouth \
+      mokutil \
+      default-fonts-core-sans \
+      default-fonts-other-sans \
+      google-noto-sans-cjk-fonts \
+      xorrisofs \
+      squashfs-tools \
+      jq && \
+    dnf5 clean all
+
+RUN mkdir -p /boot/efi && cp -ra /usr/lib/efi/*/*/EFI /boot/efi
+
+COPY --from=payload /etc/pki/akmods/certs/akmods-ublue.der /usr/share/atomarchy/akmods-ublue.der
+
+COPY --chmod=0755 iso-setup.sh /tmp/iso-setup.sh
+RUN PAYLOAD_REF="${PAYLOAD_REF}" PRODUCT_NAME="${PRODUCT_NAME}" ISO_LABEL="${ISO_LABEL}" \
+    FEDORA_VERSION="${FEDORA_VERSION}" ENROLL_UBLUE_KEY="${ENROLL_UBLUE_KEY}" /tmp/iso-setup.sh && rm -f /tmp/iso-setup.sh

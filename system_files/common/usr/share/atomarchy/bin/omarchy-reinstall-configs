@@ -1,0 +1,19 @@
+#!/bin/bash
+
+# omarchy:summary=Reset your configs to Omarchy defaults (with a backup)
+
+# Atomic (bootc) replacement installed by Atomarchy; the Omadora
+# original is kept in /usr/share/atomarchy/orig/.
+
+source /usr/libexec/atomarchy/lib.sh
+
+if (( EUID == 0 )); then
+  echo "Error: This script should not be run as root"
+  exit 1
+fi
+/usr/libexec/atomarchy/user-init --reset
+if omarchy-cmd-present omarchy-nvim-refresh; then
+  omarchy-nvim-refresh
+elif omarchy-cmd-present omarchy-nvim-setup; then
+  omarchy-nvim-setup --force
+fi

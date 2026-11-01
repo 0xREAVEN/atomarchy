@@ -1,0 +1,12 @@
+#!/bin/bash
+
+# omarchy:summary=Signing keys ship with the image
+
+# Atomic (bootc) replacement installed by Atomarchy; the Omadora
+# original is kept in /usr/share/atomarchy/orig/.
+
+source /usr/libexec/atomarchy/lib.sh
+
+echo -e "\e[32m\nSigning keys\e[0m"
+echo "Provided by the image (nothing to do)"
+exit 0

@@ -1,0 +1,25 @@
+name: clean
+
+# Delete old candidate-* tags (published images keep their channel tags) and
+# untagged manifests from GHCR.
+
+on:
+  schedule:
+    - cron: "23 3 * * 0"
+  workflow_dispatch:
+
+permissions:
+  packages: write
+
+jobs:
+  candidates:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: snok/container-retention-policy@v3.0.0
+        with:
+          account: ${{ github.repository_owner }}
+          token: ${{ secrets.GITHUB_TOKEN }}
+          image-names: "atomarchy atomarchy-gaming"
+          image-tags: "candidate-*"
+          cut-off: 14d
+          dry-run: false

@@ -1,0 +1,11 @@
+#!/bin/bash
+
+# omarchy:summary=Boot entries are managed by bootc/ostree
+# omarchy:hidden=true
+
+# Atomic (bootc) replacement installed by Atomarchy; the Omadora
+# original is kept in /usr/share/atomarchy/orig/.
+
+source /usr/libexec/atomarchy/lib.sh
+
+exit 0
