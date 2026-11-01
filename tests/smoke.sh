@@ -98,7 +98,7 @@ if [[ $flavor == "gaming" ]]; then
     check "kernel module $kmod" bash -c "rpm -qa | grep -q -- 'kmod-.*${kmod}'"
   done
   check "ntsync loaded at boot" grep -qx ntsync /usr/lib/modules-load.d/atomarchy-ntsync.conf
-  check "Mesa only from terra-mesa" bash -c '[[ -z $(dnf5 repoquery --installed --qf "%{name} %{from_repo}\n" "mesa-*" | awk "\$2 != \"terra-mesa\"") ]]'
+  check "Mesa only from terra-mesa" bash -c '[[ -z $(dnf5 repoquery --installed --qf "%{name} %{from_repo} %{sourcerpm}\n" "mesa-*" | awk "\$3 ~ /^mesa-[0-9]/ && \$2 != \"terra-mesa\"") ]]'
   check "32-bit Vulkan drivers" rpm -q mesa-vulkan-drivers.i686
   for package in steam terra-gamescope terra-mangohud umu-launcher vkBasalt lact tuned-ppd; do
     check "package $package" rpm -q "$package"

@@ -23,8 +23,10 @@ dnf5 -y "${terra[@]}" --setopt=terra-mesa.priority=1 --setopt=install_weak_deps=
   install "${packages[@]}"
 
 # --- Power profiles: tuned-ppd instead of power-profiles-daemon -------------
-dnf5 -y swap omarchy-power-profiles-daemon tuned-ppd
-dnf5 -y install tuned
+dnf5 -y --setopt=install_weak_deps=False swap omarchy-power-profiles-daemon tuned-ppd
+# No weak dependencies: they would pull kernel-tools built for the Fedora
+# kernel, not the OGC kernel this image boots.
+dnf5 -y --setopt=install_weak_deps=False install tuned
 # Omarchy drives power profiles through powerprofilesctl. tuned-ppd implements
 # the same D-Bus API but ships no client, and power-profiles-daemon conflicts
 # with it: take only the client script from Fedora's power-profiles-daemon.
@@ -36,7 +38,9 @@ if ! command -v powerprofilesctl >/dev/null; then
   rm -rf "$ppd_dir"
 fi
 
-# Every Mesa package must come from terra-mesa, or 32-bit and 64-bit drivers
-# could end up from different builds.
-stray=$(dnf5 repoquery --installed --qf '%{name}.%{arch} %{from_repo}\n' 'mesa-*' | awk '$2 != "terra-mesa"')
+# Every package built from the mesa source must come from terra-mesa, or 32-bit
+# and 64-bit drivers could end up from different builds. (mesa-libGLU is a
+# separate project and stays Fedora's.)
+stray=$(dnf5 repoquery --installed --qf '%{name}.%{arch} %{from_repo} %{sourcerpm}\n' 'mesa-*' |
+  awk '$3 ~ /^mesa-[0-9]/ && $2 != "terra-mesa"')
 [[ -z $stray ]] || die "Mesa packages not from terra-mesa: $stray"

@@ -13,3 +13,7 @@ rm -rf /var/lib/dnf /var/log/dnf5.log* /var/tmp/* /var/cache/ldconfig/aux-cache
 # tmpfiles.d (system_files/common/usr/lib/tmpfiles.d/atomarchy.conf).
 rm -rf /var/lib/plocate /var/lib/power-profiles-daemon /var/lib/texmf
 find /var/log -type f -delete 2>/dev/null || true
+
+# bootc deploys kernels itself: /boot stays empty in the image (kernel RPM
+# scriptlets drop System.map, config, loader entries there).
+find /boot -mindepth 1 -delete 2>/dev/null || true

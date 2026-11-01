@@ -1,6 +1,7 @@
 # Atomarchy Gaming: packages added on top of the atomarchy image.
-# One package per line, # comments. Installed from Terra (terra, terra-extras,
-# terra-mesa) and Fedora by build_files/gaming/20-packages.sh.
+# One package per line, # comments. Installed by build_files/gaming/20-packages.sh
+# from Terra (terra, terra-extras, terra-mesa), Fedora and negativo17's
+# fedora-multimedia (already enabled in base-main; it provides steam).
 
 # --- Steam and launchers
 steam
