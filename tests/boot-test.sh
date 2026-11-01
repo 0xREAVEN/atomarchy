@@ -17,8 +17,18 @@ work=$(cd "$work" && pwd)
 
 log() { printf '\n\033[1;34m--> %s\033[0m\n' "$*"; }
 
-ovmf_code=$(ls /usr/share/OVMF/OVMF_CODE_4M.fd /usr/share/OVMF/OVMF_CODE.fd /usr/share/edk2/ovmf/OVMF_CODE.fd 2>/dev/null | head -1)
-ovmf_vars=$(ls /usr/share/OVMF/OVMF_VARS_4M.fd /usr/share/OVMF/OVMF_VARS.fd /usr/share/edk2/ovmf/OVMF_VARS.fd 2>/dev/null | head -1)
+first_file() {
+  local file
+  for file in "$@"; do
+    if [[ -f $file ]]; then
+      echo "$file"
+      return 0
+    fi
+  done
+  return 0
+}
+ovmf_code=$(first_file /usr/share/OVMF/OVMF_CODE_4M.fd /usr/share/OVMF/OVMF_CODE.fd /usr/share/edk2/ovmf/OVMF_CODE.fd)
+ovmf_vars=$(first_file /usr/share/OVMF/OVMF_VARS_4M.fd /usr/share/OVMF/OVMF_VARS.fd /usr/share/edk2/ovmf/OVMF_VARS.fd)
 [[ -n $ovmf_code && -n $ovmf_vars ]] || { echo "OVMF firmware not found" >&2; exit 2; }
 [[ -c /dev/kvm ]] || { echo "/dev/kvm not available" >&2; exit 2; }
 
