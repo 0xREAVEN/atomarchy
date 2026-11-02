@@ -14,6 +14,8 @@
 
 Atomarchy est une distribution dérivée de [Universal Blue](https://universal-blue.org) : chaque image est un conteneur [bootc](https://bootc-dev.github.io/bootc/) construit chaque jour, testé dans une machine virtuelle, signé, puis publié. Le système se met à jour d'un bloc et revient en arrière d'une commande.
 
+![Écran de connexion d'Atomarchy (SDDM, thème Omarchy), capturé par le test de démarrage de la CI](docs/images/login.png)
+
 > Projet communautaire, **non affilié** à Omarchy, Basecamp ou Universal Blue. Omarchy provient des RPM Fedora du projet [Omadora](https://github.com/kamm3r/omadora).
 
 ## Les deux images
