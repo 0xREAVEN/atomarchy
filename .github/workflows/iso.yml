@@ -158,7 +158,7 @@ jobs:
           sudo tests/iso-install-test.sh "${{ steps.meta.outputs.iso }}" \
             "${{ steps.meta.outputs.payload }}" "${{ runner.temp }}/install" | tee install.txt
           echo '```' >>"$GITHUB_STEP_SUMMARY"
-          grep -E '^(PASS|FAIL|WARN|RESULT|INSTALL-CHECKS)' install.txt >>"$GITHUB_STEP_SUMMARY" || true
+          grep -E '^(PASS|FAIL|WARN|RESULT|INSTALL-CHECKS|REBOOT-CHECKS)' install.txt >>"$GITHUB_STEP_SUMMARY" || true
           echo '```' >>"$GITHUB_STEP_SUMMARY"
 
       - name: Upload installer test artifacts
@@ -170,8 +170,8 @@ jobs:
             installer.png
             ${{ runner.temp }}/install/*.png
             ${{ runner.temp }}/install/*.log
-            ${{ runner.temp }}/install/checks.txt
-            ${{ runner.temp }}/install/journal.txt
+            ${{ runner.temp }}/install/checks*.txt
+            ${{ runner.temp }}/install/journal*.txt
             ${{ runner.temp }}/install/grub.cfg
             ${{ runner.temp }}/install/http/ks.cfg
           if-no-files-found: ignore

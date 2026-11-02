@@ -7,7 +7,7 @@
 #
 # Needs: qemu-system-x86_64 + KVM, OVMF, xorriso, python3, ssh, socat.
 # Artifacts left in <workdir>: install-serial.log, anaconda.log,
-# install-*.png, checks.txt, journal.txt, screen.png.
+# install-*.png, checks.txt, checks-reboot.txt, journal*.txt, screen.png.
 set -euo pipefail
 
 iso=$(realpath "${1:?iso}")
@@ -209,6 +209,30 @@ set -e
 sleep 20
 screenshot "$work/monitor.sock" screen
 vm 'journalctl -b --no-pager -o short-monotonic' >"$work/journal.txt" 2>&1 || true
+
+# --- Second boot: first-boot fixups (bootc, Omarchy) must leave a clean system
+log "Rebooting the installed system"
+vm 'systemctl reboot' 2>/dev/null || true
+sleep 20
+for _ in $(seq 120); do
+  if vm true 2>/dev/null; then break; fi
+  sleep 5
+done
+set +e
+{
+  if vm true 2>/dev/null; then
+    vm 'timeout 300 systemctl is-system-running --wait' || true
+    vm 'bash -s' <"$here/boot-checks.sh"
+    echo "REBOOT-CHECKS-FAILED=$?"
+  else
+    echo "FAIL  the installed system did not come back after a reboot"
+    tail -60 "$work/serial.log"
+    echo "REBOOT-CHECKS-FAILED=1"
+  fi
+} | tee "$work/checks-reboot.txt"
+set -e
+vm 'journalctl -b --no-pager -o short-monotonic' >"$work/journal-reboot.txt" 2>&1 || true
 vm 'systemctl poweroff' 2>/dev/null || true
 
-grep -q '^INSTALL-CHECKS-FAILED=0$' "$work/checks.txt"
+grep -q '^INSTALL-CHECKS-FAILED=0$' "$work/checks.txt" &&
+  grep -q '^REBOOT-CHECKS-FAILED=0$' "$work/checks-reboot.txt"
