@@ -16,7 +16,7 @@ jobs:
   shellcheck:
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
       - name: ShellCheck
         run: |
           set -euo pipefail
@@ -34,7 +34,7 @@ jobs:
   actionlint:
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
       - name: actionlint
         run: |
           bash <(curl -sSfL https://raw.githubusercontent.com/rhysd/actionlint/v1.7.7/scripts/download-actionlint.bash) 1.7.7
@@ -43,15 +43,15 @@ jobs:
   hadolint:
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
       - name: hadolint
-        uses: hadolint/hadolint-action@v3.1.0
+        uses: hadolint/hadolint-action@v3.5.0
         with:
           dockerfile: Containerfile
           # DL3006: base images are pinned by tag on purpose (daily rebuilds).
           ignore: DL3006
       - name: hadolint (installer)
-        uses: hadolint/hadolint-action@v3.1.0
+        uses: hadolint/hadolint-action@v3.5.0
         with:
           dockerfile: iso/Containerfile
           ignore: DL3006,DL3041
@@ -59,8 +59,8 @@ jobs:
   just:
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v5
-      - uses: extractions/setup-just@v3
+      - uses: actions/checkout@v7
+      - uses: extractions/setup-just@v4
       - name: just --fmt --check
         run: |
           set -euo pipefail
@@ -72,7 +72,7 @@ jobs:
   pkgdiff:
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
       - name: pkgdiff.py self-test
         run: |
           printf 'a.x86_64\t0:1-1\nb.noarch\t0:2-1\n' >old.txt
