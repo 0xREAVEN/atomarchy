@@ -10,8 +10,10 @@ name: build
 # Pull requests and other branches run step 1 only.
 
 on:
+  # Publishing branches only: other branches are built through their pull
+  # request (building them on push too would run the CI twice).
   push:
-    branches: ["**"]
+    branches: [main, testing]
     paths-ignore:
       - "**.md"
       - "docs/**"
