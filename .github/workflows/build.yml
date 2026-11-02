@@ -129,6 +129,7 @@ jobs:
 
       - name: Smoke tests
         run: |
+          set -o pipefail
           sudo podman run --rm --network=none -v "$PWD/tests:/tests:ro" \
             "${{ steps.meta.outputs.local }}" /tests/smoke.sh | tee smoke.txt
           echo '```' >>"$GITHUB_STEP_SUMMARY"

@@ -68,7 +68,7 @@ Le build échoue si une commande `omarchy-*` appelle encore `dnf` directement. S
 |---|---|---|
 | `lint.yml` | push, PR | ShellCheck, actionlint, hadolint, `just --fmt --check`, test de `pkgdiff.py` |
 | `build.yml` | push, PR, quotidien | build → tests de fumée → démarrage VM → rapport de paquets ; sur `main`/`testing` : push `candidate-<sha>`, signature, vérification, promotion |
-| `iso.yml` | mensuel, manuel | Vérification de la signature de l'image, environnement Anaconda, `image-builder generic-iso`, démarrage de l'ISO en VM, découpage et Release |
+| `iso.yml` | mensuel, manuel, PR sur `iso/` | Vérification de la signature de l'image, environnement Anaconda, `image-builder generic-iso`, démarrage de l'ISO en VM, **installation complète automatisée puis démarrage du système installé** (`tests/iso-install-test.sh`), découpage et Release (jamais sur une PR) |
 | `clean.yml` | hebdomadaire | Suppression des tags `candidate-*` de plus de 14 jours |
 
 ## Dépôts à l'exécution
@@ -89,3 +89,4 @@ Chacun est couvert par un test de fumée ou par le test de démarrage.
 | `util-linux-script` faisait monter `util-linux` sous la base | Version épinglée sur celle de la base |
 | `terra-mesa` n'a qu'une ancienne version de `mesa-va-drivers.i686` | VA-API 32 bits non installé (inutile pour les jeux) |
 | Les dépendances faibles de `tuned` tiraient `kernel-tools` pour le noyau Fedora | `install_weak_deps=False` dans la variante jeu |
+| L'installation depuis l'ISO échouait sur du vrai matériel : la commande kickstart `bootc` (`bootc install to-filesystem`) plantait pendant la copie de l'image | Commande `ostreecontainer` depuis le stockage de conteneurs de l'ISO, comme Bazzite, puis `bootc switch` vers le registre signé (`iso/iso-setup.sh`) ; couvert par le test d'installation de l'ISO |

@@ -29,16 +29,53 @@ EOF
 
 # --- What Anaconda installs ----------------------------------------------------
 # The payload is embedded in the ISO's container storage: offline install.
-# The installed system then follows ${PAYLOAD_REF} for updates; the image's
-# containers policy requires the project signature for it.
+#
+# Deployed with Anaconda's ostreecontainer command, as Bazzite does, rather than
+# the "bootc" kickstart command: the latter runs `bootc install to-filesystem`,
+# which failed while copying the image on real hardware (and is documented by
+# osbuild to leave systemd-remount-fs failing). ostreecontainer imports the
+# layers straight into the target's ostree repository.
+#
+# A %post then points the installed system at the registry with signature
+# enforcement, so updates follow ${PAYLOAD_REF} and must carry the project
+# signature (keys/cosign.pub, shipped in the image).
+mkdir -p /usr/share/anaconda/post-scripts
 cat >/usr/share/anaconda/interactive-defaults.ks <<EOF
-bootc --source-imgref containers-storage:${PAYLOAD_REF} --target-imgref ${PAYLOAD_REF}
+%pre
+mkdir -p /tmp/atomarchy-logs
+%end
 
-%post --nochroot
+ostreecontainer --url=${PAYLOAD_REF} --transport=containers-storage --no-signature-verification
+
+%include /usr/share/anaconda/post-scripts/atomarchy-follow-registry.ks
+%include /usr/share/anaconda/post-scripts/atomarchy-selinux.ks
+%include /usr/share/anaconda/post-scripts/atomarchy-secureboot.ks
+EOF
+
+cat >/usr/share/anaconda/post-scripts/atomarchy-follow-registry.ks <<EOF
+%post --erroronfail --log=/tmp/atomarchy-logs/follow-registry.log
+bootc switch --mutate-in-place --enforce-container-sigpolicy --transport registry ${PAYLOAD_REF}
+%end
+EOF
+
+cat >/usr/share/anaconda/post-scripts/atomarchy-selinux.ks <<'EOF'
+%post --erroronfail --log=/tmp/atomarchy-logs/selinux.log
+# Policy-store labels can be wrong after a container deployment; fix them so
+# the first boot does not need a relabel.
+setenforce 0 || true
+restorecon -R /etc/selinux
+%end
+EOF
+
+cat >/usr/share/anaconda/post-scripts/atomarchy-secureboot.ks <<'EOF'
+%post --nochroot --log=/tmp/atomarchy-logs/secureboot.log
 # The gaming kernel and its modules are signed with the Universal Blue key.
 # With Secure Boot on, queue it for enrollment: MokManager asks at next boot
 # (password: universalblue), exactly as on Bazzite.
-if [ -f /usr/share/atomarchy/akmods-ublue.der ] && mokutil --sb-state 2>/dev/null | grep -qi enabled; then
+if [ ! -d /sys/firmware/efi ] || [ ! -f /usr/share/atomarchy/akmods-ublue.der ]; then
+  exit 0
+fi
+if mokutil --sb-state 2>/dev/null | grep -qi enabled; then
   mokutil --timeout -1 || :
   printf 'universalblue\nuniversalblue\n' | mokutil --import /usr/share/atomarchy/akmods-ublue.der || :
 fi
