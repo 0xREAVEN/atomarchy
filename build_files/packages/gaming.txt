@@ -1,0 +1,18 @@
+# Atomarchy Gaming: packages added on top of the atomarchy image.
+# One package per line, # comments. Installed by build_files/gaming/20-packages.sh
+# from Terra (terra, terra-extras, terra-mesa), Fedora and negativo17's
+# fedora-multimedia (already enabled in base-main; it provides steam).
+
+# --- Steam and launchers
+steam
+umu-launcher
+
+# --- Compositor and overlays (Terra builds, as on Bazzite)
+terra-gamescope
+terra-mangohud
+terra-mangohud.i686
+vkBasalt
+vkBasalt.i686
+
+# --- AMD GPU control (clocks, voltages, fan curves); lactd enabled at boot
+lact

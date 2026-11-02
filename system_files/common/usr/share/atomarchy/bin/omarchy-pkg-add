@@ -1,0 +1,41 @@
+#!/bin/bash
+
+# omarchy:summary=Install Fedora packages if they are missing (layered with rpm-ostree on Bazzite)
+# omarchy:args=<packages...>
+# omarchy:examples=omarchy pkg add jq ripgrep
+# omarchy:requires-sudo=true
+
+# Bazzite's /usr is read-only, so dnf cannot install here. rpm-ostree layers
+# the packages on top of the image and --apply-live makes them usable without
+# a reboot, which is what Omarchy's install menu expects. Packages that are
+# better as apps (GUI) should come from Flathub: omarchy-pkg-aur-add.
+
+source /usr/libexec/atomarchy/lib.sh
+
+missing=()
+for pkg in "$@"; do
+  rpm -q --whatprovides -- "$pkg" &>/dev/null || missing+=("$pkg")
+done
+(( ${#missing[@]} )) || exit 0
+
+atomic_note "Atomic system: layering ${missing[*]} with rpm-ostree (undo with: omarchy pkg drop ${missing[*]})."
+
+if atomic_as_root rpm-ostree install --idempotent --allow-inactive --apply-live -y -- "${missing[@]}"; then
+  :
+elif atomic_as_root rpm-ostree install --idempotent --allow-inactive -y -- "${missing[@]}"; then
+  # A pending deployment (e.g. a downloaded update) prevents applying live.
+  atomic_mark_reboot_required
+  atomic_note "Installed in the next deployment: reboot, then run this again."
+  exit 1
+else
+  exit 1
+fi
+
+for pkg in "${missing[@]}"; do
+  if ! rpm -q --whatprovides -- "$pkg" &>/dev/null; then
+    echo -e "\033[31mError: Package '$pkg' did not install\033[0m" >&2
+    exit 1
+  fi
+done
+
+exit 0

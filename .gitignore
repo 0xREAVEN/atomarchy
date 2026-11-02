@@ -1,0 +1,7 @@
+cosign.key
+cosign.private
+*.key
+output/
+*.iso
+*.raw
+*.qcow2

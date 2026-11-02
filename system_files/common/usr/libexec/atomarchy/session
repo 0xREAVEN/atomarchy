@@ -1,0 +1,14 @@
+#!/bin/bash
+# Login-manager entry point for the Omarchy session.
+#
+# Omarchy normally seeds a brand-new user from /etc/skel at install time. On
+# Bazzite the account usually exists already (created by the Bazzite
+# installer, or before a rebase), so the first Omarchy login seeds $HOME here
+# before Hyprland reads ~/.config/hypr/hyprland.lua. Failures never block the
+# login: the session still starts and the log says what went wrong.
+
+log_dir="${XDG_STATE_HOME:-$HOME/.local/state}/atomarchy"
+mkdir -p "$log_dir"
+/usr/libexec/atomarchy/user-init >>"$log_dir/user-init.log" 2>&1 || true
+
+exec uwsm start -g -1 -e -D Hyprland hyprland.desktop

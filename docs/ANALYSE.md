@@ -1,5 +1,7 @@
 # Analyse : Omarchy 4 sur Bazzite
 
+> **Document historique.** Cette étude a mené au premier prototype, construit sur l'image Bazzite. Le projet est ensuite devenu **Atomarchy**, construit sur `ghcr.io/ublue-os/base-main` avec une variante jeu qui reprend le noyau et la pile jeu de Bazzite. L'architecture actuelle est décrite dans [ARCHITECTURE.md](ARCHITECTURE.md). Les constats sur Omarchy, Omadora et l'adaptation atomique restent valables.
+
 Ce document a été rédigé le 1er novembre 2026. Il s'appuie sur le code source des projets suivants :
 
 - Omarchy `v4.0.6` (stable) et la branche `master` (4.5 en développement), sur [basecamp/omarchy](https://github.com/basecamp/omarchy) ;
@@ -118,7 +120,7 @@ Le choix ici est donc de **réutiliser les RPM d'Omadora au moment du build de l
 
 Ces conflits ont été **constatés en construisant l'image** sur `bazzite:stable` :
 
-1. **Xwayland.** Tous les RPM Hyprland de Fedora (COPR lionheartp, sdegler, pm4rcin, Omadora-testing) exigent `xorg-x11-server-Xwayland(x86-64)`. Le Xwayland Terra de Bazzite ne fournit ce nom que sans suffixe d'architecture, si bien que dnf voulait réinstaller le Xwayland de Fedora, ce qui est impossible. **Correctif :** un paquet vide, `omarchy-atomic-xwayland-compat`, est généré au build et déclare cette dépendance au nom du Xwayland de Bazzite, qui est conservé.
+1. **Xwayland.** Tous les RPM Hyprland de Fedora (COPR lionheartp, sdegler, pm4rcin, Omadora-testing) exigent `xorg-x11-server-Xwayland(x86-64)`. Le Xwayland Terra de Bazzite ne fournit ce nom que sans suffixe d'architecture, si bien que dnf voulait réinstaller le Xwayland de Fedora, ce qui est impossible. **Correctif :** un paquet vide, `atomarchy-xwayland-compat`, est généré au build et déclare cette dépendance au nom du Xwayland de Bazzite, qui est conservé.
 2. **ddcutil.** Bazzite fournit `terra-ddcutil`, qui entre en conflit avec le `ddcutil` de Fedora. Le paquet est donc retiré de la liste, puisque le binaire est déjà présent.
 3. **util-linux.** `util-linux-script` aurait fait monter `util-linux` et ses bibliothèques sous Bazzite. Il est épinglé sur la version de Bazzite.
 4. **Gestion d'énergie.** `power-profiles-daemon` (et la variante Omarchy) entre en conflit avec `tuned-ppd`. On garde tuned et on ajoute seulement le client `powerprofilesctl`.
@@ -139,14 +141,14 @@ ghcr.io/ublue-os/bazzite:stable
        3. dnf5 install packages.txt (+ fcitx5, + Docker) avec Terra pour cette transaction seulement
        4. powerprofilesctl → tuned-ppd
        5. copie system_files/ (session, user-init, ujust, service Flatpak)
-       6. remplace ~30 omarchy-* par leurs versions atomiques (originaux gardés dans /usr/share/omarchy-atomic/orig)
+       6. remplace ~30 omarchy-* par leurs versions atomiques (originaux gardés dans /usr/share/atomarchy/orig)
        7. arbitrages Bazzite (§6), image-info.json, nettoyage
   └─ bootc container lint
 ```
 
-Au premier lancement de la session Omarchy, `/usr/libexec/omarchy-atomic/session` effectue ces étapes :
+Au premier lancement de la session Omarchy, `/usr/libexec/atomarchy/session` effectue ces étapes :
 
-1. Il copie les fichiers de `/etc/skel` qui **appartiennent aux paquets Omarchy** (`rpm -ql`), sans écraser ceux qui existent. La liste des fichiers conservés est écrite dans `~/.local/state/omarchy-atomic/skipped-*.txt`.
+1. Il copie les fichiers de `/etc/skel` qui **appartiennent aux paquets Omarchy** (`rpm -ql`), sans écraser ceux qui existent. La liste des fichiers conservés est écrite dans `~/.local/state/atomarchy/skipped-*.txt`.
 2. Il branche l'environnement shell d'Omarchy dans `~/.bashrc.d`.
 3. Il lance `omarchy-provision-user`.
 4. Il démarre Hyprland via uwsm.
@@ -161,7 +163,7 @@ Au premier lancement de la session Omarchy, `/usr/libexec/omarchy-atomic/session
 - **Mises à jour automatiques.** `uupd.timer` de Bazzite reste actif et met l'image à jour en arrière-plan. `omarchy update` ne fait que déclencher la même chose de façon interactive, plus la partie Omarchy (migrations, mise…).
 - **NVIDIA.** Utiliser la variante `bazzite-nvidia-open`. Le correctif EGL d'Omarchy pour NVIDIA n'est présent que dans le Hyprland « omadora-testing », pas dans celui de lionheartp.
 - **Non testé graphiquement ici.** L'image a été construite et testée en conteneur : installation, commandes, initialisation d'un compte, `bootc container lint`. Le premier vrai démarrage sur une machine ou une VM reste à faire.
-- **Applis Omarchy hors image.** Obsidian et LibreOffice sont installés en Flatpak (service `omarchy-atomic-flatpaks`). Les applis commerciales du menu Install (1Password, Spotify…) passent par rpm-ostree ou Flathub selon le script.
+- **Applis Omarchy hors image.** Obsidian et LibreOffice sont installés en Flatpak (service `atomarchy-flatpaks`). Les applis commerciales du menu Install (1Password, Spotify…) passent par rpm-ostree ou Flathub selon le script.
 
 ## 9. Alternatives écartées
 

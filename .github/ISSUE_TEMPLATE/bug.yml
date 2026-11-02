@@ -1,0 +1,36 @@
+name: Bug
+description: Quelque chose ne marche pas sur Atomarchy
+labels: [bug]
+body:
+  - type: dropdown
+    id: image
+    attributes:
+      label: Image
+      options: [atomarchy, atomarchy-gaming]
+    validations:
+      required: true
+  - type: textarea
+    id: what
+    attributes:
+      label: Ce qui se passe
+      description: Ce que vous faites, ce que vous attendiez, ce qui arrive.
+    validations:
+      required: true
+  - type: textarea
+    id: doctor
+    attributes:
+      label: Sortie de `ujust atomarchy-doctor`
+      render: text
+    validations:
+      required: true
+  - type: textarea
+    id: status
+    attributes:
+      label: Sortie de `rpm-ostree status`
+      render: text
+  - type: checkboxes
+    id: upstream
+    attributes:
+      label: Vérifications
+      options:
+        - label: Le problème n'existe pas sur Omarchy / Omadora (sinon, signalez-le à l'amont)

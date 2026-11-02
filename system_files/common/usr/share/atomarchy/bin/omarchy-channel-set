@@ -1,0 +1,12 @@
+#!/bin/bash
+
+# omarchy:summary=Omarchy channels map to image tags on Bazzite
+
+# Atomic (bootc) replacement installed by Atomarchy; the Omadora
+# original is kept in /usr/share/atomarchy/orig/.
+
+source /usr/libexec/atomarchy/lib.sh
+
+echo "Follow another channel by rebasing to another tag of the image, e.g.:"
+echo "  sudo bootc switch <registry>/<image>:testing"
+exit 1

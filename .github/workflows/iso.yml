@@ -1,0 +1,205 @@
+name: iso
+
+# Installer ISOs for both images, published as a GitHub Release.
+# Monthly (the installed system updates itself right away) and on demand.
+#
+#   image-builder generic-iso + iso/Containerfile (Anaconda installer)
+#   the signed image is embedded: offline install, then it follows the channel
+#   ISO > 2 GB: split into 1900 MB parts (GitHub's per-file limit), with checksums
+
+on:
+  schedule:
+    - cron: "17 5 2 * *"
+  workflow_dispatch:
+    inputs:
+      channel:
+        description: Image channel to put on the ISOs
+        type: choice
+        options: [stable, testing]
+        default: stable
+
+concurrency:
+  group: iso
+  cancel-in-progress: false
+
+env:
+  FEDORA_VERSION: "44"
+  # osbuild's image-builder, pinned (Renovate keeps it current).
+  # renovate: datasource=docker depName=ghcr.io/osbuild/image-builder-cli
+  IMAGE_BUILDER: ghcr.io/osbuild/image-builder-cli:v88.0.0
+
+jobs:
+  iso:
+    name: ${{ matrix.image }}.iso
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    permissions:
+      contents: read
+      packages: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - image: atomarchy
+            enroll_ublue_key: "0"
+          - image: atomarchy-gaming
+            enroll_ublue_key: "1"
+    steps:
+      - name: Free disk space
+        uses: jlumbroso/free-disk-space@v1.3.1
+        with:
+          tool-cache: true
+          large-packages: true
+          docker-images: true
+          swap-storage: true
+
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Metadata
+        id: meta
+        env:
+          CHANNEL: ${{ inputs.channel || 'stable' }}
+        run: |
+          owner=${GITHUB_REPOSITORY_OWNER,,}
+          {
+            echo "payload=ghcr.io/${owner}/${{ matrix.image }}:${CHANNEL}"
+            echo "channel=${CHANNEL}"
+            echo "iso=${{ matrix.image }}-${FEDORA_VERSION}-${CHANNEL}-x86_64.iso"
+          } >>"$GITHUB_OUTPUT"
+
+      - name: Install cosign
+        uses: sigstore/cosign-installer@v3
+
+      - name: Fetch and verify the payload image
+        env:
+          PAYLOAD: ${{ steps.meta.outputs.payload }}
+        run: |
+          set -euo pipefail
+          echo "${{ secrets.GITHUB_TOKEN }}" | sudo podman login ghcr.io -u "${{ github.actor }}" --password-stdin
+          digest=$(skopeo inspect --format '{{.Digest}}' "docker://${PAYLOAD}")
+          cosign verify --key keys/cosign.pub "${PAYLOAD%:*}@${digest}" >/dev/null
+          sudo podman pull "${PAYLOAD%:*}@${digest}"
+          sudo podman tag "${PAYLOAD%:*}@${digest}" "$PAYLOAD"
+          sudo podman run --rm "$PAYLOAD" cat /usr/share/ublue-os/image-info.json | tee image-info.json
+
+      - name: Build the installer environment
+        run: |
+          sudo podman build \
+            --build-arg FEDORA_VERSION="$FEDORA_VERSION" \
+            --build-arg PAYLOAD_REF="${{ steps.meta.outputs.payload }}" \
+            --build-arg ISO_LABEL="Atomarchy-${FEDORA_VERSION}" \
+            --build-arg ENROLL_UBLUE_KEY="${{ matrix.enroll_ublue_key }}" \
+            -t localhost/atomarchy-installer:latest iso/
+
+      - name: Build the ISO (image-builder generic-iso)
+        run: |
+          set -euo pipefail
+          mkdir -p output
+          sudo podman run --rm --privileged \
+            --security-opt label=type:unconfined_t \
+            -v ./output:/output \
+            -v /var/lib/containers/storage:/var/lib/containers/storage \
+            "$IMAGE_BUILDER" build \
+            --output-dir /output \
+            --bootc-ref localhost/atomarchy-installer:latest \
+            --bootc-installer-payload-ref "${{ steps.meta.outputs.payload }}" \
+            --bootc-default-fs btrfs \
+            generic-iso
+          iso=$(sudo find output -name '*.iso' | head -1)
+          [[ -n $iso ]] || { echo "::error::image-builder produced no ISO"; exit 1; }
+          sudo mv "$iso" "${{ steps.meta.outputs.iso }}"
+          sudo chown "$(id -u):$(id -g)" "${{ steps.meta.outputs.iso }}"
+          ls -lh "${{ steps.meta.outputs.iso }}"
+
+      - name: Boot the ISO (installer must start)
+        run: |
+          set -euo pipefail
+          sudo apt-get update -q && sudo apt-get install -yq qemu-system-x86 ovmf socat imagemagick
+          sudo chmod 666 /dev/kvm
+          cp /usr/share/OVMF/OVMF_VARS_4M.fd vars.fd
+          qemu-system-x86_64 -machine q35,accel=kvm -cpu host -smp 4 -m 6144 \
+            -drive if=pflash,format=raw,readonly=on,file=/usr/share/OVMF/OVMF_CODE_4M.fd \
+            -drive if=pflash,format=raw,file=vars.fd \
+            -cdrom "${{ steps.meta.outputs.iso }}" -device virtio-vga -display none \
+            -monitor unix:monitor.sock,server,nowait -pidfile qemu.pid -daemonize
+          sleep 240
+          echo "screendump installer.ppm" | socat - UNIX-CONNECT:monitor.sock
+          sleep 2
+          convert installer.ppm installer.png
+          kill "$(cat qemu.pid)"
+
+      - name: Upload installer screenshot
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: installer-${{ matrix.image }}
+          path: installer.png
+          if-no-files-found: ignore
+
+      - name: Split and checksum
+        run: |
+          set -euo pipefail
+          iso="${{ steps.meta.outputs.iso }}"
+          sha256sum "$iso" >"${iso}-CHECKSUM"
+          split -b 1900M --numeric-suffixes=1 -a 2 "$iso" "${iso}.part"
+          rm -f "$iso"
+          sha256sum "${iso}".part* >>"${iso}-CHECKSUM"
+          mkdir -p upload && mv "${iso}"* image-info.json upload/
+          mv upload/image-info.json "upload/${{ matrix.image }}-image-info.json"
+          ls -lh upload
+
+      - name: Upload ISO parts
+        uses: actions/upload-artifact@v4
+        with:
+          name: iso-${{ matrix.image }}
+          path: upload/*
+          retention-days: 7
+          compression-level: 0
+
+  release:
+    name: GitHub Release
+    needs: iso
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Download ISO parts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: iso-*
+          path: release
+          merge-multiple: true
+
+      - name: Release notes
+        id: notes
+        env:
+          CHANNEL: ${{ inputs.channel || 'stable' }}
+        run: |
+          set -euo pipefail
+          tag="iso-${FEDORA_VERSION}.$(date -u +%Y%m%d)"
+          [[ $CHANNEL == testing ]] && tag+="-testing"
+          echo "tag=${tag}" >>"$GITHUB_OUTPUT"
+          {
+            echo "## Atomarchy ${FEDORA_VERSION} — ISO d'installation (${CHANNEL})"
+            echo
+            for info in release/*-image-info.json; do
+              jq -r '"- **\(."image-name")** \(.version) — Omarchy \(."omarchy-version")"' "$info"
+            done
+            echo
+            cat .github/release-notes.md
+          } >notes.md
+          rm -f release/*-image-info.json
+
+      - name: Publish
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.notes.outputs.tag }}
+          name: Atomarchy ${{ steps.notes.outputs.tag }}
+          body_path: notes.md
+          files: release/*
+          prerelease: ${{ inputs.channel == 'testing' }}
+          make_latest: ${{ inputs.channel != 'testing' }}

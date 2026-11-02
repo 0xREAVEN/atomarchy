@@ -1,13 +1,22 @@
-name: build-image
+name: build
+
+# Publication chain (Bazzora's, with tests moved before any push):
+#   1. build    build the image, smoke tests in the container, boot it in a
+#               VM (bootc install + QEMU/KVM), package diff against the
+#               channel. Nothing is pushed until all of this passes.
+#   2. publish  push as candidate-<sha>, sign with cosign, verify the signature.
+#   3. promote  copy the signed candidate (same digest, same signature) to the
+#               channel tags: main -> stable/latest, testing -> testing.
+# Pull requests and other branches run step 1 only.
 
 on:
   push:
-    branches: [main]
-    paths-ignore: ["**.md", "docs/**"]
+    branches: ["**"]
+    paths-ignore: ["**.md", "docs/**", "keys/README.md", ".github/ISSUE_TEMPLATE/**"]
   pull_request:
   schedule:
-    # Daily, after Bazzite's own builds, to pick up Bazzite + Omadora updates.
-    - cron: "40 6 * * *"
+    # Daily, after Universal Blue's base-main builds.
+    - cron: "40 7 * * *"
   workflow_dispatch:
 
 concurrency:
@@ -15,95 +24,237 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  REGISTRY: ghcr.io/${{ github.repository_owner }}
+  FEDORA_VERSION: "44"
 
 jobs:
   build:
+    name: ${{ matrix.image }}
     runs-on: ubuntu-24.04
+    timeout-minutes: 180
     permissions:
       contents: read
       packages: write
       id-token: write
-    env:
-      HAS_SIGNING_KEY: ${{ secrets.SIGNING_SECRET != '' }}
     strategy:
       fail-fast: false
       matrix:
-        include:
-          # KDE (Plasma Login Manager), AMD/Intel GPUs
-          - image: bazzite-omarchy
-            base: ghcr.io/ublue-os/bazzite
-          # KDE, NVIDIA (open kernel modules, RTX 20xx and newer)
-          - image: bazzite-omarchy-nvidia
-            base: ghcr.io/ublue-os/bazzite-nvidia-open
-          # GNOME (GDM) variant, uncomment if wanted
-          # - image: bazzite-omarchy-gnome
-          #   base: ghcr.io/ublue-os/bazzite-gnome
+        image: [atomarchy, atomarchy-gaming]
+    outputs:
+      channel: ${{ steps.meta.outputs.channel }}
+      publish: ${{ steps.meta.outputs.publish }}
     steps:
-      - name: Free disk space (Bazzite images are ~18 GB unpacked)
+      - name: Free disk space
         uses: jlumbroso/free-disk-space@v1.3.1
         with:
           tool-cache: true
+          android: true
+          dotnet: true
+          haskell: true
+          large-packages: true
+          docker-images: true
+          swap-storage: true
 
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v5
 
-      - name: Image name (lowercase)
+      - name: Metadata
         id: meta
+        env:
+          REF_NAME: ${{ github.ref_name }}
+          EVENT: ${{ github.event_name }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
         run: |
-          registry=$(echo "$REGISTRY" | tr '[:upper:]' '[:lower:]')
-          echo "registry=$registry" >>"$GITHUB_OUTPUT"
-          echo "date=$(date -u +%Y%m%d)" >>"$GITHUB_OUTPUT"
+          set -euo pipefail
+          owner=${GITHUB_REPOSITORY_OWNER,,}
+          registry="ghcr.io/${owner}"
+          channel=""
+          if [[ $EVENT != "pull_request" ]]; then
+            if [[ $REF_NAME == "$DEFAULT_BRANCH" ]]; then channel=stable; fi
+            if [[ $REF_NAME == "testing" ]]; then channel=testing; fi
+          fi
+          publish=false
+          [[ -n $channel ]] && publish=true
+          version="${FEDORA_VERSION}.$(date -u +%Y%m%d)"
+          {
+            echo "registry=${registry}"
+            echo "channel=${channel}"
+            echo "publish=${publish}"
+            echo "version=${version}"
+            echo "sha=${GITHUB_SHA::7}"
+            echo "local=localhost/${{ matrix.image }}:build"
+            echo "created=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          } >>"$GITHUB_OUTPUT"
+          echo "### ${{ matrix.image }} ${version} → ${channel:-not published}" >>"$GITHUB_STEP_SUMMARY"
 
       - name: Build
-        id: build
-        uses: redhat-actions/buildah-build@v2
-        with:
-          containerfiles: ./Containerfile
-          image: ${{ matrix.image }}
-          tags: stable stable-${{ steps.meta.outputs.date }}
-          build-args: |
-            BASE_IMAGE=${{ matrix.base }}
-            BASE_TAG=stable
-            IMAGE_NAME=${{ matrix.image }}
-            IMAGE_VENDOR=${{ github.repository_owner }}
-            IMAGE_REGISTRY=${{ steps.meta.outputs.registry }}
-          oci: false
-          extra-args: --pull=newer
-
-      - name: Smoke tests (Omarchy commands, user seeding, Bazzite reconciliation)
+        env:
+          REGISTRY: ${{ steps.meta.outputs.registry }}
+          CHANNEL: ${{ steps.meta.outputs.channel }}
+          VERSION: ${{ steps.meta.outputs.version }}
+          LOCAL: ${{ steps.meta.outputs.local }}
+          CREATED: ${{ steps.meta.outputs.created }}
         run: |
-          podman run --rm -v "$PWD/tests:/tests:ro" \
-            "localhost/${{ matrix.image }}:stable" bash /tests/smoke.sh
+          set -euo pipefail
+          sudo podman build \
+            --target "${{ matrix.image }}" \
+            --pull=newer \
+            --build-arg FEDORA_VERSION="$FEDORA_VERSION" \
+            --build-arg IMAGE_REGISTRY="$REGISTRY" \
+            --build-arg IMAGE_VENDOR="${GITHUB_REPOSITORY_OWNER,,}" \
+            --build-arg IMAGE_TAG="${CHANNEL:-dev}" \
+            --build-arg IMAGE_VERSION="$VERSION" \
+            --build-arg PROJECT_URL="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}" \
+            --label org.opencontainers.image.title="${{ matrix.image }}" \
+            --label org.opencontainers.image.description="Omarchy 4 on Fedora Atomic (${{ matrix.image }})" \
+            --label org.opencontainers.image.source="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}" \
+            --label org.opencontainers.image.revision="$GITHUB_SHA" \
+            --label org.opencontainers.image.version="$VERSION" \
+            --label org.opencontainers.image.created="$CREATED" \
+            --label org.opencontainers.image.licenses="Apache-2.0" \
+            --label containers.bootc=1 \
+            --tag "$LOCAL" \
+            .
+          sudo podman images
 
-      - name: Login to GHCR
-        if: github.event_name != 'pull_request'
-        uses: redhat-actions/podman-login@v1
+      - name: Smoke tests
+        run: |
+          sudo podman run --rm --network=none -v "$PWD/tests:/tests:ro" \
+            "${{ steps.meta.outputs.local }}" /tests/smoke.sh | tee smoke.txt
+          echo '```' >>"$GITHUB_STEP_SUMMARY"
+          grep -E '^(FAIL|RESULT)' smoke.txt >>"$GITHUB_STEP_SUMMARY" || true
+          echo '```' >>"$GITHUB_STEP_SUMMARY"
+
+      - name: Install VM test dependencies
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -yq qemu-system-x86 ovmf socat imagemagick
+          sudo chmod 666 /dev/kvm
+          ls -l /dev/kvm
+
+      - name: Boot test (bootc install + QEMU/KVM)
+        run: sudo tests/boot-test.sh "${{ steps.meta.outputs.local }}" "${{ runner.temp }}/boot"
+
+      - name: Upload boot test artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
         with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
+          name: boot-${{ matrix.image }}
+          path: |
+            ${{ runner.temp }}/boot/screen.png
+            ${{ runner.temp }}/boot/checks.txt
+            ${{ runner.temp }}/boot/journal.txt
+            ${{ runner.temp }}/boot/serial.log
+          if-no-files-found: ignore
+          retention-days: 14
 
-      - name: Push
+      - name: Package diff
+        if: always() && steps.meta.outcome == 'success'
+        env:
+          REFERENCE: ${{ steps.meta.outputs.registry }}/${{ matrix.image }}:${{ steps.meta.outputs.channel || 'stable' }}
+        run: |
+          set -uo pipefail
+          query='rpm -qa --qf "%{NAME}.%{ARCH}\t%{EPOCH}:%{VERSION}-%{RELEASE}\n"'
+          sudo podman run --rm --network=none "${{ steps.meta.outputs.local }}" sh -c "$query" | sort >new.txt
+          if sudo podman pull -q "$REFERENCE" >/dev/null 2>&1; then
+            sudo podman run --rm --network=none "$REFERENCE" sh -c "$query" | sort >old.txt
+          else
+            : >old.txt
+          fi
+          python3 .github/scripts/pkgdiff.py old.txt new.txt "$REFERENCE" >packages.md
+          cat packages.md >>"$GITHUB_STEP_SUMMARY"
+          cp new.txt packages.txt
+
+      - name: Upload package lists
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: packages-${{ matrix.image }}
+          path: |
+            packages.md
+            packages.txt
+          if-no-files-found: ignore
+          retention-days: 30
+
+      # --- Publication (main / testing only) ----------------------------------
+
+      - name: Check signing key
+        if: steps.meta.outputs.publish == 'true'
+        env:
+          SIGNING_SECRET: ${{ secrets.SIGNING_SECRET }}
+        run: |
+          if [[ -z $SIGNING_SECRET || ! -s keys/cosign.pub ]]; then
+            echo "::error::Publishing needs the SIGNING_SECRET secret and keys/cosign.pub (see keys/README.md)."
+            exit 1
+          fi
+
+      - name: Push candidate
         id: push
-        if: github.event_name != 'pull_request'
-        uses: redhat-actions/push-to-registry@v2
-        with:
-          image: ${{ steps.build.outputs.image }}
-          tags: ${{ steps.build.outputs.tags }}
-          registry: ${{ steps.meta.outputs.registry }}
+        if: steps.meta.outputs.publish == 'true'
+        env:
+          TARGET: ${{ steps.meta.outputs.registry }}/${{ matrix.image }}:candidate-${{ steps.meta.outputs.sha }}
+        run: |
+          set -euo pipefail
+          echo "${{ secrets.GITHUB_TOKEN }}" | sudo podman login ghcr.io -u "${{ github.actor }}" --password-stdin
+          sudo podman push --digestfile digest.txt "${{ steps.meta.outputs.local }}" "docker://${TARGET}"
+          echo "digest=$(cat digest.txt)" >>"$GITHUB_OUTPUT"
 
-      # Optional: sign with cosign when a SIGNING_SECRET (cosign private key)
-      # repository secret exists. See README "Signer l'image".
       - name: Install cosign
-        if: github.event_name != 'pull_request' && env.HAS_SIGNING_KEY == 'true'
+        if: steps.meta.outputs.publish == 'true'
         uses: sigstore/cosign-installer@v3
 
-      - name: Sign
-        if: github.event_name != 'pull_request' && env.HAS_SIGNING_KEY == 'true'
+      - name: Sign and verify
+        if: steps.meta.outputs.publish == 'true'
         env:
           COSIGN_PRIVATE_KEY: ${{ secrets.SIGNING_SECRET }}
-          COSIGN_PASSWORD: ""
+          COSIGN_PASSWORD: ${{ secrets.COSIGN_PASSWORD }}
+          IMAGE: ${{ steps.meta.outputs.registry }}/${{ matrix.image }}@${{ steps.push.outputs.digest }}
         run: |
+          set -euo pipefail
           echo "${{ secrets.GITHUB_TOKEN }}" | cosign login ghcr.io -u "${{ github.actor }}" --password-stdin
-          cosign sign -y --key env://COSIGN_PRIVATE_KEY \
-            "${{ steps.meta.outputs.registry }}/${{ matrix.image }}@${{ steps.push.outputs.digest }}"
+          cosign sign --yes --key env://COSIGN_PRIVATE_KEY "$IMAGE"
+          cosign verify --key keys/cosign.pub "$IMAGE" >/dev/null
+          echo "Signed: \`$IMAGE\`" >>"$GITHUB_STEP_SUMMARY"
+
+  promote:
+    name: promote ${{ matrix.image }}
+    needs: build
+    # Each image is promoted on its own: a failing gaming build must not hold
+    # back the main image. A candidate only exists if its build fully passed.
+    if: always() && needs.build.outputs.publish == 'true'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      fail-fast: false
+      matrix:
+        image: [atomarchy, atomarchy-gaming]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Install cosign
+        uses: sigstore/cosign-installer@v3
+
+      - name: Promote the signed candidate
+        env:
+          CHANNEL: ${{ needs.build.outputs.channel }}
+        run: |
+          set -euo pipefail
+          image="ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/${{ matrix.image }}"
+          candidate="${image}:candidate-${GITHUB_SHA::7}"
+          echo "${{ secrets.GITHUB_TOKEN }}" | skopeo login ghcr.io -u "${{ github.actor }}" --password-stdin
+          if ! digest=$(skopeo inspect --format '{{.Digest}}' "docker://${candidate}" 2>/dev/null); then
+            echo "::warning::No candidate for ${{ matrix.image }} (its build failed): not promoted."
+            exit 0
+          fi
+          cosign verify --key keys/cosign.pub "${image}@${digest}" >/dev/null
+          date=$(date -u +%Y%m%d)
+          tags=("$CHANNEL" "${CHANNEL}-${FEDORA_VERSION}" "${CHANNEL}-${FEDORA_VERSION}.${date}")
+          if [[ $CHANNEL == stable ]]; then
+            tags+=(latest "$FEDORA_VERSION" "${FEDORA_VERSION}.${date}")
+          fi
+          for tag in "${tags[@]}"; do
+            skopeo copy --all --preserve-digests "docker://${image}@${digest}" "docker://${image}:${tag}"
+            echo "- \`${image}:${tag}\` → \`${digest}\`" >>"$GITHUB_STEP_SUMMARY"
+          done

@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Faille de sécurité
+    url: https://github.com/0xREAVEN/atomarchy/security/advisories/new
+    about: Signalement privé (voir SECURITY.md)
+  - name: Omarchy (bureau, thèmes, commandes)
+    url: https://github.com/basecamp/omarchy/issues
+    about: Problèmes qui existent aussi sur Omarchy

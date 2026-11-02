@@ -1,0 +1,12 @@
+#!/bin/bash
+
+# omarchy:summary=Hibernation is configured the Bazzite way
+
+# Atomic (bootc) replacement installed by Atomarchy; the Omadora
+# original is kept in /usr/share/atomarchy/orig/.
+
+source /usr/libexec/atomarchy/lib.sh
+
+echo "On Bazzite, hibernation needs a swap file plus resume kernel arguments (rpm-ostree kargs)."
+echo "See https://docs.bazzite.gg (search: hibernation). Omarchy's Limine/mkinitcpio setup does not apply."
+exit 1
