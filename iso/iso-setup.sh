@@ -29,16 +29,125 @@ EOF
 
 # --- What Anaconda installs ----------------------------------------------------
 # The payload is embedded in the ISO's container storage: offline install.
-# The installed system then follows ${PAYLOAD_REF} for updates; the image's
-# containers policy requires the project signature for it.
+#
+# Deployed with Anaconda's ostreecontainer command, as Bazzite does, rather than
+# the "bootc" kickstart command: the latter runs `bootc install to-filesystem`,
+# which failed while copying the image on real hardware (and is documented by
+# osbuild to leave systemd-remount-fs failing). ostreecontainer imports the
+# layers straight into the target's ostree repository.
+#
+# The import unpacks each image layer under /var/tmp. On the live system that
+# is the RAM overlay, far too small for layers of several GB: the install
+# failed with "GetRawBlob: write /var/tmp/...: no space left on device". Once
+# the target disk is mounted, /var/tmp is bound to a directory on it, removed
+# after the deployment.
+#
+# A %post then points the installed system at the registry with signature
+# enforcement, so updates follow ${PAYLOAD_REF} and must carry the project
+# signature (keys/cosign.pub, shipped in the image).
+mkdir -p /usr/share/anaconda/post-scripts
 cat >/usr/share/anaconda/interactive-defaults.ks <<EOF
-bootc --source-imgref containers-storage:${PAYLOAD_REF} --target-imgref ${PAYLOAD_REF}
+%pre
+mkdir -p /tmp/atomarchy-logs
+%end
 
-%post --nochroot
+%include /usr/share/anaconda/post-scripts/atomarchy-install-tmp.ks
+
+ostreecontainer --url=${PAYLOAD_REF} --transport=containers-storage --no-signature-verification
+
+%include /usr/share/anaconda/post-scripts/atomarchy-install-tmp-cleanup.ks
+%include /usr/share/anaconda/post-scripts/atomarchy-follow-registry.ks
+%include /usr/share/anaconda/post-scripts/atomarchy-system.ks
+%include /usr/share/anaconda/post-scripts/atomarchy-selinux.ks
+%include /usr/share/anaconda/post-scripts/atomarchy-secureboot.ks
+EOF
+
+cat >/usr/share/anaconda/post-scripts/atomarchy-install-tmp.ks <<'EOF'
+%pre-install --erroronfail --log=/tmp/atomarchy-logs/install-tmp.log
+set -x
+for root in /mnt/sysroot /mnt/sysimage; do
+  if mountpoint -q "$root"; then
+    mkdir -p "$root/atomarchy-install-tmp"
+    mount --bind "$root/atomarchy-install-tmp" /var/tmp
+    echo "$root/atomarchy-install-tmp" >/tmp/atomarchy-install-tmp
+    df -h /var/tmp
+    exit 0
+  fi
+done
+echo "The target root is not mounted: cannot move /var/tmp to the disk." >&2
+exit 1
+%end
+EOF
+
+cat >/usr/share/anaconda/post-scripts/atomarchy-install-tmp-cleanup.ks <<'EOF'
+%post --nochroot --log=/tmp/atomarchy-logs/install-tmp-cleanup.log
+set -x
+dir=$(cat /tmp/atomarchy-install-tmp 2>/dev/null) || exit 0
+umount /var/tmp || umount -l /var/tmp || :
+case $dir in
+  */atomarchy-install-tmp) rm -rf "$dir" ;;
+esac
+%end
+EOF
+
+# `bootc switch --mutate-in-place` only works outside a booted system with
+# bootc-dev/bootc@f7b41cc; without it, the deployment's origin is edited the
+# way Bazzite does. Either way the result is checked.
+cat >/usr/share/anaconda/post-scripts/atomarchy-follow-registry.ks <<EOF
+%post --erroronfail --log=/tmp/atomarchy-logs/follow-registry.log
+set -x
+if ! bootc switch --mutate-in-place --enforce-container-sigpolicy --transport registry ${PAYLOAD_REF}; then
+  sed -i 's|^container-image-reference=.*|container-image-reference=ostree-image-signed:docker://${PAYLOAD_REF}|' /ostree/deploy/*/deploy/*.origin
+fi
+grep -H '^container-image-reference=' /ostree/deploy/*/deploy/*.origin
+grep -qx 'container-image-reference=ostree-image-signed:docker://${PAYLOAD_REF}' /ostree/deploy/*/deploy/*.origin
+%end
+EOF
+
+cat >/usr/share/anaconda/post-scripts/atomarchy-system.ks <<'EOF'
+%post --erroronfail --log=/tmp/atomarchy-logs/system.log
+set -x
+# Boot to the login screen even after a text-mode install, for which Anaconda
+# selects multi-user.target.
+systemctl set-default graphical.target
+# "/" is mounted from the kernel command line (root=, rootflags=), then as a
+# read-only composefs by ostree-prepare-root. The "/" line Anaconda writes in
+# the fstab only makes systemd-remount-fs fail at every boot: the overlay
+# refuses its btrfs options (ostreedev/ostree#3193; bootc's own fix, adding
+# "ro", is not enough). It is commented out, like `bootc install` leaves it.
+# The marker line tells bootc's fstab generator the file is already handled.
+tmp=$(mktemp)
+awk '!/^[[:space:]]*#/ && $2 == "/" {
+  print "# Atomarchy installer: / is mounted from the kernel command line as a read-only"
+  print "# composefs; a \"/\" entry here makes systemd-remount-fs fail (ostreedev/ostree#3193)."
+  print "# Updated by bootc-fstab-edit.service"
+  print "#" $0
+  next
+} { print }' /etc/fstab >"$tmp"
+cat "$tmp" >/etc/fstab
+rm -f "$tmp"
+cat /etc/fstab
+%end
+EOF
+
+cat >/usr/share/anaconda/post-scripts/atomarchy-selinux.ks <<'EOF'
+%post --erroronfail --log=/tmp/atomarchy-logs/selinux.log
+# Policy-store labels can be wrong after a container deployment; fix them so
+# the first boot does not need a relabel.
+setenforce 0 || true
+restorecon -R /etc/selinux
+%end
+EOF
+
+cat >/usr/share/anaconda/post-scripts/atomarchy-secureboot.ks <<'EOF'
+%post --nochroot --log=/tmp/atomarchy-logs/secureboot.log
 # The gaming kernel and its modules are signed with the Universal Blue key.
 # With Secure Boot on, queue it for enrollment: MokManager asks at next boot
 # (password: universalblue), exactly as on Bazzite.
-if [ -f /usr/share/atomarchy/akmods-ublue.der ] && mokutil --sb-state 2>/dev/null | grep -qi enabled; then
+if [ ! -d /sys/firmware/efi ] || [ ! -f /usr/share/atomarchy/akmods-ublue.der ]; then
+  exit 0
+fi
+if mokutil --sb-state 2>/dev/null | grep -qi enabled; then
   mokutil --timeout -1 || :
   printf 'universalblue\nuniversalblue\n' | mokutil --import /usr/share/atomarchy/akmods-ublue.der || :
 fi

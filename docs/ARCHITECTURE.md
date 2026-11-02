@@ -68,7 +68,7 @@ Le build échoue si une commande `omarchy-*` appelle encore `dnf` directement. S
 |---|---|---|
 | `lint.yml` | push, PR | ShellCheck, actionlint, hadolint, `just --fmt --check`, test de `pkgdiff.py` |
 | `build.yml` | push, PR, quotidien | build → tests de fumée → démarrage VM → rapport de paquets ; sur `main`/`testing` : push `candidate-<sha>`, signature, vérification, promotion |
-| `iso.yml` | mensuel, manuel | Vérification de la signature de l'image, environnement Anaconda, `image-builder generic-iso`, démarrage de l'ISO en VM, découpage et Release |
+| `iso.yml` | mensuel, manuel, PR sur `iso/` | Vérification de la signature de l'image, environnement Anaconda, `image-builder generic-iso`, démarrage de l'ISO en VM, **installation complète automatisée puis démarrage du système installé** (`tests/iso-install-test.sh`), découpage et Release (jamais sur une PR) |
 | `clean.yml` | hebdomadaire | Suppression des tags `candidate-*` de plus de 14 jours |
 
 ## Dépôts à l'exécution
@@ -89,3 +89,5 @@ Chacun est couvert par un test de fumée ou par le test de démarrage.
 | `util-linux-script` faisait monter `util-linux` sous la base | Version épinglée sur celle de la base |
 | `terra-mesa` n'a qu'une ancienne version de `mesa-va-drivers.i686` | VA-API 32 bits non installé (inutile pour les jeux) |
 | Les dépendances faibles de `tuned` tiraient `kernel-tools` pour le noyau Fedora | `install_weak_deps=False` dans la variante jeu |
+| L'installation depuis l'ISO échouait (`GetRawBlob: write /var/tmp/…: no space left on device`) : l'import décompresse chaque couche dans `/var/tmp`, qui est en RAM dans l'environnement live, et les plus grosses couches pèsent plusieurs Go | `/var/tmp` est monté sur le disque cible pendant le déploiement (`%pre-install`, puis nettoyé). Déploiement par `ostreecontainer` comme Bazzite, puis bascule vers l'image signée du registre (`iso/iso-setup.sh`). Couvert par le test d'installation de l'ISO |
+| Après une installation par Anaconda, `systemd-remount-fs` échouait au premier démarrage (racine composefs en lecture seule, [ostreedev/ostree#3193](https://github.com/ostreedev/ostree/issues/3193)), et une installation en mode texte démarrait sans écran de connexion (`multi-user.target`) | `%post` : la ligne `/` du `fstab` est désactivée (la racine est montée depuis la ligne de commande du noyau, comme après `bootc install` ; le correctif de bootc, qui ajoute `ro`, ne suffit pas) et `graphical.target` est imposé. Le test d'installation vérifie aussi un second démarrage |

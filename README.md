@@ -92,6 +92,8 @@ Chaque build, sur chaque image, passe par ces étapes :
 5. **Rapport des paquets** ajoutés, retirés et mis à jour par rapport à la version publiée.
 6. **Publication en `candidate`, signature cosign, vérification**, puis **promotion** vers le canal sous le même digest.
 
+Chaque ISO est elle aussi testée avant sa publication : installation complète par Anaconda sur un disque virtuel vierge (exactement comme une installation manuelle), démarrage du système installé et vérifications par SSH, dont le suivi de l'image signée du registre.
+
 Une image qui échoue à une étape n'est jamais publiée : les utilisateurs restent sur la dernière version validée. Les versions des actions, du noyau OGC et de l'outil d'ISO sont tenues à jour par Dependabot et Renovate. Voir [SECURITY.md](SECURITY.md).
 
 Pour vérifier une image :

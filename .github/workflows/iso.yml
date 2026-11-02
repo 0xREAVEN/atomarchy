@@ -5,11 +5,22 @@ name: iso
 #
 #   image-builder generic-iso + iso/Containerfile (Anaconda installer)
 #   the signed image is embedded: offline install, then it follows the channel
+#   every ISO is tested end to end before release: full Anaconda install onto
+#   a blank virtual disk, then the installed system is booted and checked
 #   ISO > 2 GB: split into 1900 MB parts (GitHub's per-file limit), with checksums
+#
+# Pull requests touching the installer build and test the ISOs (downloadable
+# from the run's artifacts) without publishing a release.
 
 on:
   schedule:
     - cron: "17 5 2 * *"
+  pull_request:
+    paths:
+      - "iso/**"
+      - ".github/workflows/iso.yml"
+      - "tests/iso-install-test.sh"
+      - "tests/boot-checks.sh"
   workflow_dispatch:
     inputs:
       channel:
@@ -17,10 +28,15 @@ on:
         type: choice
         options: [stable, testing]
         default: stable
+      publish:
+        description: Publish the tested ISOs as a GitHub Release
+        type: boolean
+        default: true
 
 concurrency:
-  group: iso
-  cancel-in-progress: false
+  # Releases queue up; a newer push to a pull request replaces its older run.
+  group: iso-${{ github.event_name == 'pull_request' && github.ref || 'release' }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 env:
   FEDORA_VERSION: "44"
@@ -32,7 +48,7 @@ jobs:
   iso:
     name: ${{ matrix.image }}.iso
     runs-on: ubuntu-24.04
-    timeout-minutes: 180
+    timeout-minutes: 240
     permissions:
       contents: read
       packages: read
@@ -112,11 +128,16 @@ jobs:
           sudo mv "$iso" "${{ steps.meta.outputs.iso }}"
           sudo chown "$(id -u):$(id -g)" "${{ steps.meta.outputs.iso }}"
           ls -lh "${{ steps.meta.outputs.iso }}"
+          # The images are inside the ISO now: free the space for the install test.
+          sudo podman system prune -af >/dev/null
+          sudo rm -rf output
+          df -h /
 
       - name: Boot the ISO (installer must start)
         run: |
           set -euo pipefail
-          sudo apt-get update -q && sudo apt-get install -yq qemu-system-x86 ovmf socat imagemagick
+          sudo apt-get update -q
+          sudo apt-get install -yq qemu-system-x86 qemu-utils ovmf socat imagemagick xorriso
           sudo chmod 666 /dev/kvm
           cp /usr/share/OVMF/OVMF_VARS_4M.fd vars.fd
           qemu-system-x86_64 -machine q35,accel=kvm -cpu host -smp 4 -m 6144 \
@@ -131,13 +152,30 @@ jobs:
           convert installer.ppm installer.png
           kill "$(cat qemu.pid)"
 
-      - name: Upload installer screenshot
+      - name: Install test (Anaconda install, then boot the installed system)
+        run: |
+          set -o pipefail
+          sudo tests/iso-install-test.sh "${{ steps.meta.outputs.iso }}" \
+            "${{ steps.meta.outputs.payload }}" "${{ runner.temp }}/install" | tee install.txt
+          echo '```' >>"$GITHUB_STEP_SUMMARY"
+          grep -E '^(PASS|FAIL|WARN|RESULT|INSTALL-CHECKS|REBOOT-CHECKS)' install.txt >>"$GITHUB_STEP_SUMMARY" || true
+          echo '```' >>"$GITHUB_STEP_SUMMARY"
+
+      - name: Upload installer test artifacts
         if: always()
         uses: actions/upload-artifact@v7
         with:
           name: installer-${{ matrix.image }}
-          path: installer.png
+          path: |
+            installer.png
+            ${{ runner.temp }}/install/*.png
+            ${{ runner.temp }}/install/*.log
+            ${{ runner.temp }}/install/checks*.txt
+            ${{ runner.temp }}/install/journal*.txt
+            ${{ runner.temp }}/install/grub.cfg
+            ${{ runner.temp }}/install/http/ks.cfg
           if-no-files-found: ignore
+          retention-days: 14
 
       - name: Split and checksum
         run: |
@@ -156,12 +194,14 @@ jobs:
         with:
           name: iso-${{ matrix.image }}
           path: upload/*
-          retention-days: 7
+          retention-days: ${{ github.event_name == 'pull_request' && 3 || 7 }}
           compression-level: 0
 
   release:
     name: GitHub Release
     needs: iso
+    # Only ISOs that installed and booted in the test above get here.
+    if: github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.publish)
     runs-on: ubuntu-24.04
     permissions:
       contents: write
