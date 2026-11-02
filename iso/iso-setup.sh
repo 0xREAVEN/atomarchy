@@ -110,13 +110,19 @@ set -x
 # Boot to the login screen even after a text-mode install, for which Anaconda
 # selects multi-user.target.
 systemctl set-default graphical.target
-# The root is a read-only composefs mount: unless "/" is "ro" in the fstab
-# Anaconda writes, systemd-remount-fs fails at boot (ostreedev/ostree#3193).
-# bootc makes the same edit, but only from the second boot on.
+# "/" is mounted from the kernel command line (root=, rootflags=), then as a
+# read-only composefs by ostree-prepare-root. The "/" line Anaconda writes in
+# the fstab only makes systemd-remount-fs fail at every boot: the overlay
+# refuses its btrfs options (ostreedev/ostree#3193; bootc's own fix, adding
+# "ro", is not enough). It is commented out, like `bootc install` leaves it.
+# The marker line tells bootc's fstab generator the file is already handled.
 tmp=$(mktemp)
-awk '!/^[[:space:]]*#/ && $2 == "/" && $4 !~ /(^|,)ro(,|$)/ {
-  print "# Atomarchy installer: \"ro\" added for / (composefs, ostreedev/ostree#3193)"
-  $4 = $4 ",ro"
+awk '!/^[[:space:]]*#/ && $2 == "/" {
+  print "# Atomarchy installer: / is mounted from the kernel command line as a read-only"
+  print "# composefs; a \"/\" entry here makes systemd-remount-fs fail (ostreedev/ostree#3193)."
+  print "# Updated by bootc-fstab-edit.service"
+  print "#" $0
+  next
 } { print }' /etc/fstab >"$tmp"
 cat "$tmp" >/etc/fstab
 rm -f "$tmp"
