@@ -77,7 +77,8 @@ jobs:
         run: |
           set -euo pipefail
           echo "${{ secrets.GITHUB_TOKEN }}" | sudo podman login ghcr.io -u "${{ github.actor }}" --password-stdin
-          digest=$(skopeo inspect --format '{{.Digest}}' "docker://${PAYLOAD}")
+          # sudo: podman login above wrote root-owned credentials.
+          digest=$(sudo skopeo inspect --format '{{.Digest}}' "docker://${PAYLOAD}")
           cosign verify --key keys/cosign.pub "${PAYLOAD%:*}@${digest}" >/dev/null
           sudo podman pull "${PAYLOAD%:*}@${digest}"
           sudo podman tag "${PAYLOAD%:*}@${digest}" "$PAYLOAD"
