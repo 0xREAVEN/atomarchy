@@ -120,7 +120,7 @@ pids+=("$qemu_pid")
 
 # A screenshot every 5 minutes shows where a stuck install stopped. Anaconda in
 # cmdline mode waits after a crash: stop as soon as it reports one.
-errors='Traceback \(most recent|PayloadInstallationError|installation failed|There was an error running the kickstart'
+errors='Traceback \(most recent|PayloadInstallationError|installation failed|There was an error running the kickstart|The installer will now terminate|exited with the code|An unknown error has occurred'
 anaconda_failed() {
   grep -qE "$errors" "$work/anaconda.log" "$work/install-serial.log" 2>/dev/null
 }
@@ -143,7 +143,8 @@ wait "$qemu_pid" || qemu_status=$?
 
 if anaconda_failed; then
   echo "Anaconda reported an error:"
-  grep -hE -B2 -A12 "$errors" "$work/anaconda.log" "$work/install-serial.log" 2>/dev/null | tail -80
+  sed 's/\x1b\[[0-9;?=]*[a-zA-Z]//g' "$work/anaconda.log" "$work/install-serial.log" 2>/dev/null |
+    grep -E -B6 -A6 "$errors" | tail -80
   exit 1
 fi
 if (( qemu_status != 0 )); then

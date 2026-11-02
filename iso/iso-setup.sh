@@ -36,6 +36,12 @@ EOF
 # osbuild to leave systemd-remount-fs failing). ostreecontainer imports the
 # layers straight into the target's ostree repository.
 #
+# The import unpacks each image layer under /var/tmp. On the live system that
+# is the RAM overlay, far too small for layers of several GB: the install
+# failed with "GetRawBlob: write /var/tmp/...: no space left on device". Once
+# the target disk is mounted, /var/tmp is bound to a directory on it, removed
+# after the deployment.
+#
 # A %post then points the installed system at the registry with signature
 # enforcement, so updates follow ${PAYLOAD_REF} and must carry the project
 # signature (keys/cosign.pub, shipped in the image).
@@ -45,16 +51,55 @@ cat >/usr/share/anaconda/interactive-defaults.ks <<EOF
 mkdir -p /tmp/atomarchy-logs
 %end
 
+%include /usr/share/anaconda/post-scripts/atomarchy-install-tmp.ks
+
 ostreecontainer --url=${PAYLOAD_REF} --transport=containers-storage --no-signature-verification
 
+%include /usr/share/anaconda/post-scripts/atomarchy-install-tmp-cleanup.ks
 %include /usr/share/anaconda/post-scripts/atomarchy-follow-registry.ks
 %include /usr/share/anaconda/post-scripts/atomarchy-selinux.ks
 %include /usr/share/anaconda/post-scripts/atomarchy-secureboot.ks
 EOF
 
+cat >/usr/share/anaconda/post-scripts/atomarchy-install-tmp.ks <<'EOF'
+%pre-install --erroronfail --log=/tmp/atomarchy-logs/install-tmp.log
+set -x
+for root in /mnt/sysroot /mnt/sysimage; do
+  if mountpoint -q "$root"; then
+    mkdir -p "$root/atomarchy-install-tmp"
+    mount --bind "$root/atomarchy-install-tmp" /var/tmp
+    echo "$root/atomarchy-install-tmp" >/tmp/atomarchy-install-tmp
+    df -h /var/tmp
+    exit 0
+  fi
+done
+echo "The target root is not mounted: cannot move /var/tmp to the disk." >&2
+exit 1
+%end
+EOF
+
+cat >/usr/share/anaconda/post-scripts/atomarchy-install-tmp-cleanup.ks <<'EOF'
+%post --nochroot --log=/tmp/atomarchy-logs/install-tmp-cleanup.log
+set -x
+dir=$(cat /tmp/atomarchy-install-tmp 2>/dev/null) || exit 0
+umount /var/tmp || umount -l /var/tmp || :
+case $dir in
+  */atomarchy-install-tmp) rm -rf "$dir" ;;
+esac
+%end
+EOF
+
+# `bootc switch --mutate-in-place` only works outside a booted system with
+# bootc-dev/bootc@f7b41cc; without it, the deployment's origin is edited the
+# way Bazzite does. Either way the result is checked.
 cat >/usr/share/anaconda/post-scripts/atomarchy-follow-registry.ks <<EOF
 %post --erroronfail --log=/tmp/atomarchy-logs/follow-registry.log
-bootc switch --mutate-in-place --enforce-container-sigpolicy --transport registry ${PAYLOAD_REF}
+set -x
+if ! bootc switch --mutate-in-place --enforce-container-sigpolicy --transport registry ${PAYLOAD_REF}; then
+  sed -i 's|^container-image-reference=.*|container-image-reference=ostree-image-signed:docker://${PAYLOAD_REF}|' /ostree/deploy/*/deploy/*.origin
+fi
+grep -H '^container-image-reference=' /ostree/deploy/*/deploy/*.origin
+grep -qx 'container-image-reference=ostree-image-signed:docker://${PAYLOAD_REF}' /ostree/deploy/*/deploy/*.origin
 %end
 EOF
 
