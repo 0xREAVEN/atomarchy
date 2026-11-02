@@ -74,3 +74,18 @@ Le build échoue si une commande `omarchy-*` appelle encore `dnf` directement. S
 ## Dépôts à l'exécution
 
 Restent activés pour `omarchy pkg add` : Fedora, `kammer/omadora` et `lionheartp/Hyprland`. Terra et `ublue-os/packages` ne servent qu'au build et sont désactivés à la fin, comme sur Bazzite.
+
+## Correctifs découverts par les tests
+
+Chacun est couvert par un test de fumée ou par le test de démarrage.
+
+| Problème | Correctif |
+|---|---|
+| Omarchy appelle `chromium` / `chromium.desktop`, alors que Fedora fournit `chromium-browser`. Les applis web et le navigateur par défaut ne fonctionnaient pas. | Lien `/usr/bin/chromium` et lanceur `chromium.desktop` ; celui de Fedora est masqué (`20-omarchy-atomic.sh`) |
+| `base-main` n'a ni `xdg-user-dirs` ni `xdg-utils`, si bien que `omarchy-provision-user` échouait | Ajoutés à `packages/common.txt` |
+| `mcelog` échoue à chaque démarrage sur les processeurs AMD (il ne gère que les Intel) | Drop-in `ExecCondition` : l'unité est ignorée hors Intel (`mcelog.service.d`) |
+| Le `%posttrans` d'`omarchy-settings` exige `/run/lock`, absent d'un build en conteneur | Créé avant l'installation (`10-packages.sh`) |
+| `dracut` échoue si `/root` (lien vers `/var/roothome`) n'a pas de cible | Cible créée avant la reconstruction de l'initramfs |
+| `util-linux-script` faisait monter `util-linux` sous la base | Version épinglée sur celle de la base |
+| `terra-mesa` n'a qu'une ancienne version de `mesa-va-drivers.i686` | VA-API 32 bits non installé (inutile pour les jeux) |
+| Les dépendances faibles de `tuned` tiraient `kernel-tools` pour le noyau Fedora | `install_weak_deps=False` dans la variante jeu |

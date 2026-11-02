@@ -62,6 +62,8 @@ qemu-system-x86_64 \
 
 cleanup() {
   [[ -f $work/qemu.pid ]] && kill "$(cat "$work/qemu.pid")" 2>/dev/null || true
+  # Artifacts are collected by the unprivileged CI user.
+  chmod -R a+rX "$work" 2>/dev/null || true
 }
 trap cleanup EXIT
 
