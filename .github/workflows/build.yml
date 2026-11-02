@@ -12,7 +12,16 @@ name: build
 on:
   push:
     branches: ["**"]
-    paths-ignore: ["**.md", "docs/**", "keys/README.md", ".github/ISSUE_TEMPLATE/**"]
+    paths-ignore:
+      - "**.md"
+      - "docs/**"
+      - "keys/README.md"
+      - ".github/ISSUE_TEMPLATE/**"
+      # The installer ISO is built by iso.yml from published images.
+      - "iso/**"
+      - ".github/workflows/iso.yml"
+      - ".github/workflows/clean.yml"
+      - ".github/release-notes.md"
   pull_request:
   schedule:
     # Daily, after Universal Blue's base-main builds.
