@@ -46,7 +46,7 @@ jobs:
             enroll_ublue_key: "1"
     steps:
       - name: Free disk space
-        uses: jlumbroso/free-disk-space@v1.3.1
+        uses: jlumbroso/free-disk-space@v2.0.0
         with:
           tool-cache: true
           large-packages: true
@@ -54,7 +54,7 @@ jobs:
           swap-storage: true
 
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@v7
 
       - name: Metadata
         id: meta
@@ -132,7 +132,7 @@ jobs:
 
       - name: Upload installer screenshot
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: installer-${{ matrix.image }}
           path: installer.png
@@ -151,7 +151,7 @@ jobs:
           ls -lh upload
 
       - name: Upload ISO parts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: iso-${{ matrix.image }}
           path: upload/*
@@ -166,10 +166,10 @@ jobs:
       contents: write
     steps:
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@v7
 
       - name: Download ISO parts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           pattern: iso-*
           path: release
@@ -196,7 +196,7 @@ jobs:
           rm -f release/*-image-info.json
 
       - name: Publish
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           tag_name: ${{ steps.notes.outputs.tag }}
           name: Atomarchy ${{ steps.notes.outputs.tag }}
