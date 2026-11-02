@@ -125,7 +125,8 @@ jobs:
             -cdrom "${{ steps.meta.outputs.iso }}" -device virtio-vga -display none \
             -monitor unix:monitor.sock,server,nowait -pidfile qemu.pid -daemonize
           sleep 240
-          echo "screendump installer.ppm" | socat - UNIX-CONNECT:monitor.sock
+          # Absolute path: QEMU runs daemonized, with / as working directory.
+          echo "screendump $PWD/installer.ppm" | socat - UNIX-CONNECT:monitor.sock
           sleep 2
           convert installer.ppm installer.png
           kill "$(cat qemu.pid)"
