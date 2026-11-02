@@ -80,8 +80,11 @@ state=$(vm 'timeout 300 systemctl is-system-running --wait' || true)
 echo "system state: $state"
 
 log "Checks"
+# Keep going on failed checks: the screenshot and journal are what explain them.
+set +e
 vm 'bash -s' <"$here/boot-checks.sh" | tee "$work/checks.txt"
 status=${PIPESTATUS[0]}
+set -e
 
 log "Login screen screenshot"
 sleep 20

@@ -68,6 +68,7 @@ check "splash kernel arguments" grep -q rhgb /usr/lib/bootc/kargs.d/10-atomarchy
 section "Services and updates"
 check "uupd timer enabled" test -L /etc/systemd/system/timers.target.wants/uupd.timer
 check "rpm-ostree automatic updates disabled" bash -c '! systemctl is-enabled --quiet rpm-ostreed-automatic.timer'
+check "mcelog skipped on non-Intel CPUs" grep -q GenuineIntel /usr/lib/systemd/system/mcelog.service.d/10-atomarchy-intel-only.conf
 check "docker.socket enabled" test -L /etc/systemd/system/sockets.target.wants/docker.socket
 check "Bazaar installed" rpm -q bazaar
 check "Homebrew integration installed" rpm -q ublue-brew
